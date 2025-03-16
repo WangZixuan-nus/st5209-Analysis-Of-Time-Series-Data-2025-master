@@ -1,0 +1,41 @@
+---
+title: "Week 5 Demonstration"
+format: html
+editor: visual
+---
+
+## Set up
+
+```{r}
+#| message: FALSE
+library(fpp3)
+library(tidyverse)
+library(slider)
+library(gridExtra)
+```
+
+# PRErecorded video:
+
+## **Statistical Modeling of Time Series**
+
+```{r}
+set.seed(42)
+
+rw_ts <- tibble(
+    j = 1:200,
+    wn = rnorm(200),
+    rw0 = cumsum(wn),
+    rw1 = rw0 + 0.2 * (j - 1)
+    ) |> as_tsibble(index = j)
+
+rw_ts |>
+    pivot_longer(cols = c("rw0", "rw1"),
+                 values_to = "value",
+                 names_to = "drift") |>
+    autoplot(value) + 
+    geom_segment(aes(x = 0, y = 0, xend = 200, yend = 199 * 0.2),
+                 linetype = "dashed", color = "blue") +
+    geom_segment(aes(x = 0, y = 0, xend = 200, yend = 0),
+                 linetype = "dashed", color = "black") + 
+    scale_color_discrete(labels = c("0", "0.2"), type = c("black", "blue"))
+```

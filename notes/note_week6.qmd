@@ -1,0 +1,376 @@
+---
+title: "Week 5 Demonstration"
+format: html
+editor: visual
+---
+
+## Set up
+
+```{r}
+#| message: FALSE
+library(fpp3)
+library(tidyverse)
+library(slider)
+library(gridExtra)
+```
+
+# PRErecorded video:
+
+## **7.1 Simple exponential smoothing**
+
+```{r}
+library(fma)
+cowtemp <- fma::cowtemp |>
+    as_tsibble() |>
+    rename(Day = index,
+              Temp = value)
+cowtemp |> autoplot(Temp)
+```
+
+```{r}
+cowtemp |> 
+    ACF(Temp) |>
+    autoplot()
+```
+
+fit SES
+
+```{r}
+cow_fit <- cowtemp |> 
+    model(SES = ETS(Temp ~ error("A") + trend("N") + season("N")))
+cow_fit
+cow_fit |> tidy()
+```
+
+```{r}
+report(cow_fit)
+components(cow_fit) |> 
+  autoplot()
+```
+
+compare the cross-validation accuracy of SES
+
+```{r}
+cow_cv <- cowtemp |> 
+    stretch_tsibble(.init = 10, .step = 1) |>
+    model(Naive = NAIVE(Temp),
+          Mean = MEAN(Temp),
+          Drift = NAIVE(Temp ~ drift()),
+          LinearTrend = TSLM(Temp ~ trend()),
+          SES = ETS(Temp ~ error("A") + trend("N") + season("N")))
+
+cow_fc <- cow_cv |> forecast(h = 1)
+
+cow_fc |> 
+    accuracy(cowtemp) |>
+    select(.model, RMSSE, MASE) |>
+    arrange(RMSSE)
+```
+
+Compare forecasts
+
+```{r}
+cowtemp |> 
+    slice_head(n = 64) |>
+    model(Mean = MEAN(Temp),
+          Naive = NAIVE(Temp),
+          SES = ETS(Temp ~ error("A") + trend("N") + season("N"))) |>
+    forecast(h = 11) |>
+    autoplot(cowtemp, level = NULL)
+```
+
+## **7.2 Holt’s linear trend method**
+
+```{r}
+sg_pop <- read.csv("D:/AAnus/semester2/ST5209X Analysis Of Time Series Data/st5209-2025-master/_data/singapore population.csv")
+sg_pop$Population <- as.numeric(gsub(",", "", sg_pop$Population))
+sg_pop$year <- as.integer(sg_pop$year)
+sg_pop <- sg_pop |>
+  as_tsibble(index=year)
+sg_pop |>
+  autoplot(Population)
+```
+
+```{r}
+sg_cv <- sg_pop |> 
+    stretch_tsibble(.init = 10, .step = 1) |>
+    model(Drift = NAIVE(Population ~ drift()),
+          LinearTrend = TSLM(Population ~ trend()),
+          Holt = ETS(Population ~ error("A") + trend("A") + season("N")),
+          SES = ETS(Population ~ error("A") + trend("N") + season("N")))
+sg_fc <- sg_cv |> forecast(h = 1)
+
+sg_fc |> 
+    accuracy(sg_pop) |>
+    select(.model, RMSSE, MASE) |>
+    arrange(RMSSE)
+```
+
+## **7.4 Holt-Winters’ seasonal method**
+
+```{r}
+aus_arrivals |>
+    filter(Origin == "Japan") |>
+    slice_head(n = 107) |> 
+    model(SNaive = SNAIVE(Arrivals ~ drift()),
+          Additive = ETS(Arrivals ~ error("A") + trend("A") + season("A")),
+          Multiplicative = ETS(Arrivals ~ error("M") + trend("A") + season("M"))
+    ) |>
+    forecast(h = 20) |>
+    autoplot(aus_arrivals, level = NULL)
+```
+
+```{r}
+aus_cv <- aus_arrivals |>
+    filter(Origin == "Japan") |>
+    stretch_tsibble(.init = 10, .step = 1) |> 
+    model(SNaive = SNAIVE(Arrivals ~ drift()),
+          Additive = ETS(Arrivals ~ error("A") + trend("A") + season("A")),
+          Multiplicative = ETS(Arrivals ~ error("M") + trend("A") + season("M")),
+          AdditiveDamped = ETS(Arrivals ~ error("A") + trend("Ad") + season("A")),
+          MultiplicativeDamped = ETS(Arrivals ~ error("M") + trend("Ad") + season("M"))
+    )
+
+aus_fc1 <- aus_cv |>
+    forecast(h = 5)
+
+aus_fc1 |>
+    accuracy(aus_arrivals) |>
+    select(.model, RMSSE, MASE) |>
+    arrange(RMSSE)
+```
+
+## 1. Holt linear method and transformations
+
+Forecast China's GDP from the `global_economy` data set using the Holt linear trend method. Experiment with damping and Box-Cox transformations. Try to develop an intuition of what each is doing to the forecasts.
+
+```{r}
+view(global_economy)
+china_gdp <- global_economy |>
+  filter(Country == "China") %>% 
+  select(GDP)
+
+china_gdp|>autoplot()
+
+#Holt linear method
+china_gdp_model <- china_gdp |> 
+    model(Holt = ETS(GDP ~ error("A") + trend("A") + season("N")))
+
+china_fc <- china_gdp_model |> forecast(h = 10)
+china_fc|>autoplot(china_gdp)
+
+china_fc |> 
+    accuracy(china_gdp) |>
+    select(.model, RMSSE, MASE) |>
+    arrange(RMSSE)
+
+
+
+```
+
+```{r}
+.log()
+```
+
+```{r}
+
+  
+```
+
+## 2. Cross-validation
+
+Perform cross-validation for the models identified in Q1. How do their relative performance change as we vary the forecast horizon?
+
+```{r}
+china_cv <- china_gdp |>
+  stretch_tsibble(.step = 1,.init = 10)
+
+china_cv_fit <- china_cv |>
+  model(holt = ETS(GDP ~ error("A") + trend("A") + season("N")),
+        holt_log = ETS(log(GDP) ~ error("A") + trend("A") + season("N")),
+        holt_bc = ETS(box_cox(GDP, 0.2) ~ error("A") + trend("A") + season("N")),
+        holt_damped = ETS(GDP ~ error("A") + trend("Ad") + season("N"))
+        )
+
+china_cv_fc <- china_cv_fit |>
+  forecast(h = 20)#h = 20 is the max forcast horizon
+
+#accuracy of different methods
+china_cv_fc
+
+china_cv_fc |>
+  group_by(.id, .model) |>
+  mutate(h = row_number()) |>
+  ungroup() |>
+  as_fable(response = "GDP", distribution = GDP)
+
+china_cv_fc |>
+  filter(h == 2)|>
+  
+
+
+
+
+
+results <- tibble(.model = colnames(fit))
+for(i in 1:10){
+  tmp <- china_fc |>
+    filter(h== 2 * i) |>
+    accuracy(china_gdp) |>
+    select(.model, MASE)
+  colnames(tmp)<- C(".model", as.character(2*i))
+                    results <- left_join(results, tmp)
+}
+
+results
+
+```
+
+## 3. ETS and decomposition
+
+a.  Fit a Holt-Winters multiplicative model to the diabetes dataset. Plot the model components. How can we interpret the components?
+
+    ```{r}
+    diabetes <- readRDS("D:/AAnus/semester2/ST5209X Analysis Of Time Series Data/st5209-2025-master/_data/cleaned/diabetes.rds")
+
+    diabetes|>
+      model(holt_winters = ETS(TotalC ~ error("A") + trend("A") + season("M")))|>
+      components() |>
+      autoplot()
+
+    ```
+
+    What is the difference between that and classical decomposition?
+
+    "level" \<- "trend" : maybe exponent trend — log transformation
+
+    ```{r}
+    diabetes|>
+      model(holt_winters = ETS(log(TotalC) ~ error("A") + trend("A") + season("A")))|>
+      components() |>
+      autoplot() 
+    ```
+
+Level become a linear straight line.
+
+"slope" = b_t, the gradient of the time series -\> the percentage increase d
+
+seasonal component center at 0, while the previous one = 1.
+
+a.  Fit a Holt-Winters additive model to a log transformed version of the diabetes dataset. Plot the model components. Why do the components have very different values compared to the multiplicative case?
+
+b.  How is this decomposition different from STL?
+
+    ```{r}
+    diabetes |>
+      model(STL(TotalC)) |>
+      components()|>
+      autoplot()
+
+    #log_STL:
+
+    diabetes |>
+      model(STL(log(TotalC))) |>
+      components()|>
+      autoplot() 
+    ```
+
+Holt-winter method: Only use the past values to
+
+STL: explian the time series, not for forecasting
+
+## 4. Model parameters
+
+a.  For the models fit in Q1, how many parameters does each model have?
+
+    parametric model(linear) & non-parametric model(smoothing...)
+
+    It is more similar to the non-parametric model(smoothing method), hyper-parameter...
+
+b.  How are the parameters fitted?
+
+c.  How can we extract the model parameters?
+
+d.  How can you interpret the fitted paramters?
+
+    ```{r}
+    #to check the parameters:
+    china_fit |>
+      tidy()
+
+    china_fit |>
+      select(holt) |>
+      tidy()
+    ```
+
+\\alpha =
+
+\phi is huge -\> level of damping is small, do not damp too much.
+
+GDP is flacturaing, so \beta....
+
+## 5. Model selection
+
+:
+
+a.  What happens when no formula is provided to `ETS`? Try this with the `gtemp_both` time series from the `astsa` package.
+
+    ```{r}
+    library(astsa)
+    ?astsa::gtemp_both
+
+    gtemp_both <- gtemp_both |>
+      as_tsibble() |>
+      rename(Year = index, 
+                 Temp = value)
+
+    gtemp_both |> 
+      autoplot()
+
+    ```
+
+    ```{r}
+    gtemp_both |>
+      model(ETS(Temp))
+    ```
+
+    AAN: ...., no damping
+
+    Is this the most approprite model?
+
+    ```{r}
+    gtemp_both |>
+      model(ETS(Temp)) |>
+      forecast(h = 20) |>
+      autoplot(gtemp_both)
+    ```
+
+b.  What happens when you filter the time series to before 1950?
+
+    ```{r}
+    gtemp_both |>
+      filter_index(~"1950") |>
+      model(ETS(Temp)) |>
+      forecast(h = 20) |>
+      autoplot(gtemp_both)
+    ```
+
+c.  What happens when you filter to before 2010?
+
+    ```{r}
+    gtemp_both |>
+      filter_index(~"2010") |>
+      model(ETS(Temp)) |>
+      forecast(h = 20) |>
+      autoplot(gtemp_both)
+    ```
+
+d.  Interpret the model parameters.
+
+```{r}
+gtemp_both |>
+  model(ets = ETS(Temp)) |>
+  tidy()
+```
+
+This time series is flucturating, so we need to perform smoothing ... comparing to other data.
