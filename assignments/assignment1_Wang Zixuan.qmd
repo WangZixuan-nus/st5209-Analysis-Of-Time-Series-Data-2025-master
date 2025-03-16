@@ -1,0 +1,388 @@
+---
+title: "ST5209/X Assignment 1"
+format: pdf
+editor: visual
+author: "Wang Zixuan,A0298286H"
+---
+
+## Set up
+
+1.  Make sure you have the following installed on your system: $\text{\LaTeX}$, R4.2.2+, RStudio 2023.12+, and Quarto 1.3.450+.
+2.  Clone the course [repo](https://github.com/yanshuotan/st5209-2024).
+3.  Create a separate folder in the root directory of the repo, label it with your name, e.g. `yanshuo-assignments`
+4.  Copy the assignment1.qmd file over to this directory.
+5.  Modify the duplicated document with your solutions, writing all R code as code chunks.
+6.  When running code, make sure your working directory is set to be the folder with your assignment .qmd file, e.g. `yanshuo-assignments`. This is to ensure that all file paths are valid.[^1]
+
+[^1]: You may view and set the working directory using `getwd()` and `setwd()`.
+
+## Submission
+
+1.  Render the document to get a .pdf printout.
+2.  Submit both the .qmd and .pdf files to Canvas.
+
+```{r}
+#| message: FALSE
+#| echo: FALSE
+library(tidyverse)
+library(fpp3)
+```
+
+## Question 1 (Quarto)
+
+Read the [guide](https://quarto.org/docs/computations/r.html) on using Quarto with R and answer the following questions:
+
+a)  Write a code chunk that imports `tidyverse` and `fpp3`.
+
+```{r}
+library(tidyverse)
+library(fpp3)
+```
+
+a)  Modify the chunk so that only the following output is shown (i.e. the usual output about attaching packages and conflicts is not shown.)
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+library(tidyverse)
+library(fpp3)
+```
+
+echo=FALSE: Hides the **code** but shows the **output**.
+
+message=FALSE: Suppresses package loading **messages**.
+
+warning=FALSE: Hides **warnings**.
+
+\includegraphics[width=0.9\textwidth]{../_images/quarto_chunk_output.png}
+
+c)  Modify the chunk so that it is executed but no code is shown at all when rendered to a pdf.
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(fpp3)
+```
+
+Use the *include=FALSE* option. So the **code and output** will be completely hidden in the rendered PDF, but the code **still runs** in the background.
+
+c)  Modify the document so that your name is printed on it beneath the title.
+
+Modify the YAML section in the beginning of the document.
+
+## Question 2 (Livestock)
+
+Consider the `aus_livestock` dataset loaded in the `fpp3` package.
+
+a)  Use `filter()` to extract a time series comprising the monthly total number of pigs slaughtered in Victoria, Australia, from Jul 1972 to Dec 2018.
+
+```{r}
+#view(aus_livestock)
+aus_livestock |>   
+  filter(Animal=="Pigs",
+         State=="Victoria",
+         Month >= yearmonth("1972 Jul")& Month <= yearmonth("2018 Dec"))
+```
+
+a)  Make a time plot of the resulting time series.
+
+```{r}
+aus_livestock |>   
+  filter(Animal=="Pigs",
+         State=="Victoria",
+         Month >= yearmonth("1972 Jul")& Month <= yearmonth("2018 Dec")) |>
+  autoplot(.vars = Count)+
+  labs(
+    title = "Monthly Total Number of Pigs Slaughtered in Victoria, Australia",
+    x = "Year",) +
+  theme_minimal()
+```
+
+## Question 3 (Beer production)
+
+Consider the `aus_production` dataset loaded in the `fpp3` package. We will study the column measuring the production of beer.
+
+a)  Make a time plot of the beer production time series.
+
+```{r}
+#view(aus_production )
+aus_production|>
+  autoplot(.vars = Beer)+
+  labs(
+    title = "Beer Production in Australia",
+    x = "Year",
+    y = "Beer Production") +
+  theme_minimal()
+```
+
+a)  Describe the observed trend.
+
+We see that the time series displays seasonality. Also, the beer production was increasing before 1975. After 1975, the beer production became stable, but still maintained a seasonal pattern.
+
+a)  Make a seasonal plot.
+
+```{r}
+aus_production|>
+  gg_season(Beer)+
+  labs(
+    title = "Seasonal Plot of Beer Production in Australia") +
+  theme_minimal()
+```
+
+a)  What is the period of the seasonality?
+
+We see that the time series displays the **4 quarter** seasonality(i.e. 1 year). The beer production is higher in Q4 and Q1, and decreases in Q2, thus the beer production is lower in Q2 and Q3.
+
+a)  Describe the seasonal behavior.
+
+Since Australia's summer falls in **Q4 and Q1**, which includes Christmas, New Year. People want to celebrate the occasions, thus beer consumption **increase**. On the contrary, as temperatures drop, beer consumption **declines** in **Q2 and Q3** since people tend to prefer warm beverages.
+
+## Question 4 (Pelts)
+
+Consider the `pelt` dataset loaded in the `fpp3` package, which measures the Hudson Bay Company trading records for Snowshoe Hare and Canadian Lynx furs from 1845 to 1935.
+
+a)  Plot both time series on the same axes. *Hint: Use `pivot_longer()` to create a key column*.
+
+```{r}
+#view(pelt)
+pelt_long <- pelt |>  
+  pivot_longer(cols = c(Hare, Lynx), 
+               names_to = "Species", values_to = "Furs") #a new key column
+
+pelt_long |>  
+  autoplot(Furs) +  
+  labs(
+    title = "Hudson Bay Company Trading Records",
+    x = "Year",
+    y = "Number of Furs Traded"
+  ) +
+  theme_minimal()
+```
+
+a)  What happens when you try to use `gg_season()` to the lynx fur time series? What is producing the error?
+
+```{r}
+#pelt_long |> 
+ # gg_season(Lynx)
+```
+
+*We get error: "! The data must contain at least one observation per seasonal period."*
+
+The error occurs because gg_season() expects a regular time series. But this dataset only contains yearly index. So there is no within-year seasonality to plot.
+
+a)  Make a lag plot with the first 20 lags. Which lags display strong positive correlation? Which lags display strong negative correlation? Verify this with the time plot.
+
+```{r}
+plt1 <- pelt |> gg_lag(Lynx, lags = 1:20, geom = "point", alpha = 0.2)+
+  labs(title = "Lag Plot of Lynx Furs")
+plt2 <- pelt |> gg_lag(Hare, lags = 1:20, geom = "point", alpha = 0.2)+
+  labs(title = "Lag Plot of Hare Furs")
+library(gridExtra)
+grid.arrange(plt1, plt2, ncol = 2)
+```
+
+For the lag plots for the Lynx, The graphs with lags of 1, 10, and 20 months show strong positive correlations. Lag plots of 5 and 15 months show strong negative correlations.
+
+For the lag plots for the Hare, The graphs with lags of 1, 10 months show strong positive correlations. Lag plots of 5 and 15 months show strong negative correlations.
+
+a)  If you were to guess the seasonality period based on the lag plot, what would it be?
+
+There may be a cycle pattern. Base on the lag plot, the seasonality period could be around 10 years.
+
+a)  Use the provided function `gg_custom_season()` in `_code/plot_util.R`[^2] to make a seasonal plot for lynx furs with the period that you guessed.[^3] Does the resulting plot suggest seasonality? Why or why not?
+
+[^2]: You can load this function using `source("../_code/plot.util.R")`.
+
+[^3]: Unfortunately, it seems \``gg_season()` does not allow this functionality.
+
+```{r}
+#| warning: FALSE
+source("../_code/plot_util.R")
+pelt |>
+  gg_custom_season(Lynx, period = 10)
+pelt |>
+  gg_custom_season(Hare, period = 10)
+```
+
+From the plot, we can see a 10-year period seanonality. The data increases in the first 5 years and decreases in the second 5 years. However, the seasonality is not that conspicuous. So maybe there is also a cycle in this time series.
+
+## Question 5 (Box-Cox, Q3.3 in FPP)
+
+Why is the Box-Cox transform unhelpful for the `canadian_gas` data?
+
+```{r}
+var(canadian_gas$Volume)
+canadian_gas |> 
+  autoplot(Volume)
+```
+
+ 
+
+```{r}
+lambda <- canadian_gas |>
+  features(Volume, features = guerrero) |>
+  pull(lambda_guerrero)
+canadian_gas |>
+  autoplot(box_cox(Volume, lambda))
+```
+
+The Box-Cox transform is used to stabilize variance. However, the fluctuations throughout the time series do not have similar variability to the level of the series. So for this 1-parameter transformations, the Box-Cox transform is unhelpful.
+
+## Question 6 (Decomposition with outliers, Q3.7 in FPP)
+
+Consider the last five years of the Gas data from `aus_production` .
+
+```{r}
+gas <- tail(aus_production, 5*4) |> select(Gas)
+#view(gas)
+```
+
+a.  Plot the time series. Can you identify seasonal fluctuations and/or a trend-cycle?
+
+    ```{r}
+    gas |> autoplot() +
+      labs(title = "Gas Production",
+           x = "Year", y = "Gas Production") +
+      theme_minimal()
+    ```
+
+    We can observe a yearly seasonality and increasing trend.
+
+b.  Use `classical_decomposition` with `type=multiplicative` to calculate the trend-cycle and seasonal indices.
+
+    ```{r}
+    #| warning: false
+    gas_decomp <- gas |>
+      model(classical_decomposition(Gas, type = "multiplicative"))|>
+      components()
+
+     gas_decomp |>
+        autoplot()+
+      labs(title = "Classical Decomposition of Gas Production",
+           x = "Year", y = "Gas Production")+
+         theme_minimal()
+    ```
+
+    By using the time series decomposition, the trend is upward trend. And the time series has a 1-year seasonality. The gas production is higher in Q2 and Q3, lower in Q1 and Q4.
+
+c.  Do the results support the graphical interpretation from part a?
+
+    Yes, they come to the same interpretation.
+
+d.  Compute and plot the seasonally adjusted data.
+
+    ```{r}
+    library(ggplot2)
+    ggplot(gas_decomp, aes(x = Quarter, y = season_adjust)) +
+      geom_line(color = "blue") + 
+      labs(title = "Seasonally Adjusted Gas Production",
+           x = "Time", y = "Seasonally Adjusted Gas Production") +
+      theme_minimal()
+    ```
+
+e.  Change one observation to be an outlier by running the following snippet:
+
+    ```{r}
+    #| eval: TRUE
+    # Change to eval: TRUE in order to run
+    outlier <- gas |>
+      mutate(Gas = if_else(Quarter == yearquarter("2007Q4"), Gas + 300, Gas))
+    ```
+
+    Recompute the decomposition. What is the effect of the outlier on the seasonally adjusted data?
+
+    ```{r}
+    #| warning: false
+    outlier_decomp <- outlier |>
+      model(classical_decomposition(Gas, type = "multiplicative"))|>
+      components()
+
+     outlier_decomp |>
+        autoplot()+
+      labs(title = "Classical Decomposition of Gas Production With Outlier",
+           x = "Year", y = "Gas Production")+
+         theme_minimal()
+    ```
+
+    ```{r}
+    ggplot(outlier_decomp, aes(x = Quarter, y = season_adjust)) +
+      geom_line(color = "blue") + 
+      labs(title = "Seasonally Adjusted Gas Production",
+           x = "Time", y = "Seasonally Adjusted Gas Production") +
+      theme_minimal()
+    ```
+
+    Both seasonal and trend pattern change. Also, the seasonally adjust data has a peak in the middle. So the outlier has affected the whole data.
+
+f.  Does it make any difference if the outlier is near the end rather than in the middle of the time series?
+
+```{r}
+end_outlier <- gas |>
+  mutate(Gas = if_else(Quarter == yearquarter("2010Q2"), Gas + 300, Gas))
+
+outlier2_decomp <- end_outlier |>
+  model(classical_decomposition(Gas, type = "multiplicative"))|>
+  components()
+
+outlier2_decomp |>
+    autoplot()+
+  labs(title = "Classical Decomposition of Gas Production With Outlier In The End",
+       x = "Year", y = "Gas Production")+
+     theme_minimal()
+```
+
+```{r}
+ggplot(outlier2_decomp, aes(x = Quarter, y = season_adjust)) +
+  geom_line(color = "blue") + 
+  labs(title = "Seasonally Adjusted Gas Production",
+       x = "Time", y = "Seasonally Adjusted Gas Production") +
+  theme_minimal()
+```
+
+Both seasonal and trend pattern change. Also, the time series seems to be no seasonality.
+
+## Question 7 (STL decomposition, Q3.10 in FPP)
+
+Consider the `canadian_gas` dataset.
+
+a.  Do an STL decomposition of the data.
+
+    ```{r}
+    canadian_gas_decomp <- canadian_gas |> 
+      model(STL(Volume))|>
+      components()
+    ```
+
+b.  How does the seasonal shape change over time? \[Hint: Try plotting the seasonal component using `gg_season()`.\]
+
+    ```{r}
+    canadian_gas_decomp |>
+      autoplot()
+    ```
+
+    ```{r}
+    #view(canadian_gas_decomp)
+    canadian_gas_decomp |>
+      gg_season(canadian_gas_decomp$season_year)
+    ```
+
+    The time series displays a seasonality. The seasonality changed a bit since 1990. Before that, the volume is higher in Dec and Jan, while it is lower in summer. After 1990, the volume changed dramatically every month.
+
+c.  Apply a calendar adjustment and compute the STL decomposition again. What is the effect on the seasonal shape?
+
+```{r}
+canadian_gas_adjusted = canadian_gas |>
+  mutate(volume_adj = Volume / days_in_month(Month)) 
+
+canadian_gas_adjusted |>
+  model(STL(volume_adj, robust = TRUE)) |>
+  components() |>
+  autoplot()
+```
+
+```{r}
+canadian_gas_adjusted |>
+  gg_season(y = Volume)
+```
+
+The plot is smoother than the previous one. We have ironed out some kinks.

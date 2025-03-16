@@ -1,0 +1,383 @@
+---
+title: "ST5209X Assignment 2"
+format: pdf
+editor: visual
+author: "Wang Zixuan,A0298286H"
+---
+
+## Set up
+
+1.  Make sure you have the following installed on your system: $\text{\LaTeX}$, R4.2.2+, RStudio 2023.12+, and Quarto 1.3.450+.
+2.  Clone the course [repo](https://github.com/yanshuotan/st5209-2024).
+3.  Create a separate folder in the root directory of the repo, label it with your name, e.g. `yanshuo-assignments`
+4.  Copy the assignment2.qmd file over to this directory.
+5.  Modify the duplicated document with your solutions, writing all R code as code chunks.
+6.  When running code, make sure your working directory is set to be the folder with your assignment .qmd file, e.g. `yanshuo-assignments`. This is to ensure that all file paths are valid.[^1]
+
+[^1]: You may view and set the working directory using `getwd()` and `setwd()`.
+
+## Submission
+
+1.  Render the document to get a .pdf printout.
+2.  Submit both the .qmd and .pdf files to Canvas.
+
+```{r}
+#| message: false
+#| include: false
+library(tidyverse)
+library(fpp3)
+```
+
+## Question 1 (Forecast evaluation, Q5.12 in FPP)
+
+`tourism` contains quarterly visitor nights (in thousands) from 1998 to 2017 for 76 regions of Australia.
+
+a.  Extract data from the Gold Coast region using `filter()` and aggregate total overnight trips using `summarise()`. Call this new dataset `gc_tourism`.
+
+```{r}
+#view(tourism)
+gc_tourism <- tourism |>
+  filter(Region == "Gold Coast")  |>
+  summarise(Trips = sum(Trips))
+gc_tourism
+```
+
+b.  Using `slice()` or `filter()`, create three training sets for this data excluding the last 1, 2 and 3 years. For example, `gc_train_1 <- gc_tourism |> slice(1:(n()-4))`.
+
+    Using slice():
+
+    n() returns the total number of rows in data.
+
+    slice(1:(n() - X)) keeps all rows except the last X rows.
+
+```{r}
+# Exclude last 4 quarters (1 year)
+gc_train_1 <- gc_tourism |> slice(1:(n()-4))
+# Exclude last 8 quarters (2 year)
+gc_train_2 <- gc_tourism |> slice(1:(n()-8))
+# Exclude last 12 quarters (3 year)
+gc_train_3 <- gc_tourism |> slice(1:(n()-12))
+```
+
+```{r}
+# Equivalent using filter()
+gc_train_1 <- gc_tourism |> filter(row_number() <= n() - 4)
+gc_train_2 <- gc_tourism |> filter(row_number() <= n() - 8)
+gc_train_3 <- gc_tourism |> filter(row_number() <= n() - 12)
+```
+
+c.  Compute and plot one year of forecasts for each training set using the seasonal naive (`SNAIVE()`) method. Call these `gc_fc_1`, `gc_fc_2` and `gc_fc_3`, respectively. (Hint: You may combine the mable objects from each model into a single mable using `bind_cols`)
+
+```{r}
+gc_fc_1 <- gc_train_1 |> 
+    model(SeasonalNaive = SNAIVE(Trips)) |>
+  forecast(h = 4)
+gc_fc_2 <- gc_train_2 |> 
+    model(SeasonalNaive = SNAIVE(Trips)) |>
+  forecast(h = 4)
+gc_fc_3 <- gc_train_3 |> 
+    model(SeasonalNaive = SNAIVE(Trips)) |>
+  forecast(h = 4)
+
+# Combine forecasts into a single mable
+combined_fc <- bind_rows(
+  gc_fc_1 |> mutate(.model = "SNAIVE (Excl. 1 Year)"),
+  gc_fc_2 |> mutate(.model = "SNAIVE (Excl. 2 Years)"),
+  gc_fc_3 |> mutate(.model = "SNAIVE (Excl. 3 Years)")
+)
+
+combined_fc |> autoplot(gc_tourism) +
+  labs(title = "Seasonal Naive Forecasts for Gold Coast Tourism")+
+  theme_minimal()
+
+```
+
+d.  Use `accuracy()` to compare the test set forecast accuracy using MASE. What can you conclude about the relative performance of the different models? Explain your answer.
+
+    ```{r}
+    combined_fc |>
+        accuracy(gc_tourism) |>
+        select(.model, RMSSE, MASE, RMSE, MAE) |>
+        arrange(MASE)
+    ```
+
+```{r}
+gc_tourism |> 
+  model(classical_decomposition(Trips,type = "additive"))|>
+  components() |> 
+  autoplot()
+```
+
+```{r}
+gc_tourism |>
+  filter_index("2013 Q1" ~ "2017 Q4") |>
+  autoplot()+
+  theme_minimal()
+```
+
+The model using SeasonalNaive method and data which is excluding 2 years has the lowest MASE. So Data timeliness ≠ predictive accuracy: models that exclude less historical data (Excl. 1 Year) perform the worst due to external shocks to the test set that add significant changes to data trends. The trend spike in 2017 is directly responsible for the lowest MASE in the Excl. 2 Years model because it avoids predicting a spike year, whereas the SNAIVE model is unable to accommodate sudden trend changes.
+
+## Question 2 (ACF plots, Q2.9 in FPP)
+
+The following time plots and ACF plots correspond to four different time series. Match each time plot in the first row with one of the ACF plots in the second row.
+
+![](images/acfguess-1.png)
+
+plot1 - C
+
+Daily temp of cow appears to be **stationary** with some fluctuations but no clear trend or seasonality. The ACF plot in C, the correlations are mostly distributed within the confidence intervals and there are no spikes at fixed intervals.
+
+plot2 - A
+
+Monthly accidental deaths: appears a **seasonal pattern**. In plot A, there is a more prominent correlation coefficient near lag=12, reflecting typical annual seasonality.
+
+plot3 - D
+
+Monthly air passengers appears a **strong upward trend** and seasonal fluctuations. With time going by, the seasonal amplitude increases. The D plot has a long trailing tail and shows a clear correlation spike at a multiple of 12 lag, which is consistent with a “trend + seasonal” series.
+
+plot4 - B
+
+Annual mink trappings appears to be **cyclical**. Plot B has no seasonal spikes or consistently high correlation.
+
+## Question 3 (Time series classification)
+
+We will investigate this [dataset](https://kdd.ics.uci.edu/databases/synthetic_control/synthetic_control.html), which contains 600 synthetic control charts for an industrial process. There are 6 types of control charts, and our goal is to build a model to classify them correctly.
+
+We have already processed the raw data into a convenient, labeled form. Run the following code snippet to load it and create train and test sets.
+
+```{r}
+ccharts <- read_rds("../_data/CLEANED/ccharts.rds")
+ccharts_train <- ccharts[["train"]]
+ccharts_test <- ccharts[["test"]]
+```
+
+a.  Make a time plot of one time series from each category in the training set. Note that the category is recorded under the `Type` column.
+
+    ```{r}
+    #view(ccharts_train)
+    unique(ccharts_train$Type)
+
+    # Select one time series from each category
+    set.seed(5209)
+    sample_ids <- ccharts_train %>%
+      distinct(Type, id) %>%       
+      group_by(Type) %>%          
+      slice_sample(n = 1) %>%      
+      ungroup()
+
+    sample_data <- ccharts_train %>%
+      semi_join(sample_ids, by = c("Type", "id"))
+
+    #view(sample_data)
+    # Time plot for each type
+    library(ggplot2)
+
+    ggplot(sample_data, aes(x = Time, y = value, color = Type)) +
+      geom_line() +
+      facet_wrap(~ Type, scales = "free_y") +
+      labs(title = "Time Series Plots for Each Control Chart Type",
+           x = "Time",
+           y = "Value") +
+      theme_minimal()
+    ```
+
+b.  Compute all time series features for both the training and test set using the snippet. What is the difference between `acf1` and `stl_e_acf1` for Increasing, Decreasing, Upward, and Downward types? Why is there a difference?
+
+```{r}
+#| eval: TRUE
+# Change to eval: TRUE in order to run
+train_feats <- ccharts_train |> features(value, feature_set(pkgs = "feasts"))
+test_feats <- ccharts_test |> features(value, feature_set(pkgs = "feasts"))
+
+train_feats|>
+  select(Type, acf1, stl_e_acf1) |>
+  group_by(Type)|>
+  summarize(mean_acf1 = mean(acf1), mean_stl_e_acf1 = mean(stl_e_acf1))
+
+test_feats|>
+  select(Type, acf1, stl_e_acf1) |>
+  group_by(Type)|>
+  summarize(mean_acf1 = mean(acf1), mean_stl_e_acf1 = mean(stl_e_acf1))
+```
+
+-   **acf1** (First Lag Autocorrelation)Measures how strongly the time series is correlated with its lag-1 version. A high value indicates a persistent trend or seasonality.
+
+-   **stl_e_acf1** (Autocorrelation of STL Residuals)Computes the same first-lag autocorrelation after removing trend and seasonality using STL decomposition. If a series has a strong trend or seasonality, stl_e_acf1 should be much lower than acf1.
+
+    For those time series who have strong trend: the "**decreasing, downward, increasing, upward**" time series, they all have higher acf1 and lower stl_e_acf1. That means these time seires have strong trends. After removing the trend, the remaining series has negative and low correlation, meaning the residuals slightly oscillate around the trend.
+
+    On the contrary, the "**cyclic**" types have a periodic pattern, so they have high acf1. Even after removing the trend, there is still some correlation left (stl_e_acf1 = 0.39). Because cyclic patterns often remain in the residuals after decomposition.
+
+    For "**normal**" types, acf1 is at low level(0.02189) because they are purely random process (no trend or seasonality). After decomposition, the stl_e_acf1 is slightly negative and low, indicating no strong pattern.
+
+    All in all, the acf1 measures the overall correlations, while stl_e_acf1 measures the correlation after removing trends. Trend causes high acf1, but stl_e_acf1 drops significantly. For purely random time series, both measures are close to 0. Cyclic patterns retain some autocorrelation even after decomposition.
+
+c.  Investigate the relationship between the following features and `Type`. Pick two features whose scatter plot gives a good separation between all 6 chart types.
+
+    i.  `linearity`
+
+    ii. `trend_strength`
+
+    iii. `acf1`
+
+    iv. `stl_e_acf1`
+
+    v.  `shift_level_max`
+
+    vi. `shift_var_max`
+
+    vii. `n_crossing_points`
+
+    Make the scatter plot and explain why these features are able to separate the different chart types.
+
+    ```{r}
+    library(GGally)
+    selected_feats <- c("linearity", "trend_strength", "acf1", 
+                       "stl_e_acf1", "shift_level_max", "shift_var_max",
+                       "n_crossing_points", "Type")
+
+    feature_pairs <- train_feats |> 
+      select(all_of(selected_feats)) |>
+      ggpairs(mapping = aes(color = Type, alpha = 0.5),
+              columns = 1:7,
+              upper = list(continuous = wrap("cor", size = 3)),
+              lower = list(continuous = wrap("points", size = 0.8))) +
+      theme_bw() +
+      labs(title = "Scatter plot of ll features ") +
+      theme(axis.text = element_text(size=6))
+
+    feature_pairs
+    ```
+
+    ```{r}
+    ggplot(train_feats, aes(x = linearity, y = shift_level_max, color = Type)) +
+      geom_point(alpha = 0.7) +
+      labs(title = "Scatter Plot of Linearity vs Shift Level Max",
+           x = "Linearity",
+           y = "Shift Level Max") +
+      theme_minimal()
+
+    ```
+
+    linearity – Measures how well a linear model fits the time series.
+
+    trend_strength – Captures how strong the trend component is.
+
+    acf1 – First-lag autocorrelation. Measures the overall correlations.
+
+    stl_e_acf1 – Autocorrelation of residuals after trend/seasonality removal.
+
+    shift_level_max – Maximum shift in level changes.
+
+    shift_var_max – Maximum shift in variance.
+
+    n_crossing_points – Number of times the series crosses its mean.
+
+    So the linearity and shift_level_max can separate these types. Linearity helps separate Increasing, Upward( both have positive slope), Decreasing, Downward(both have negative slope) from Normal & Cyclic( both close to 0).Shift level max helps differentiate between Upward/Downward/Cylic (which have larger shifts) and Increasing/Decreasing/Normal (which are smoother trends).
+
+d.  Install the `caret` package and use the following snippet to fit a $k$-nearest neighbors model on the two features you have selected (substitute `X` and `Y` for the two features you selected in b), and then predict on the test set. What percentage of the test examples are correctly classified? Write code to compute this value. (You should get \> 90% accuracy)
+
+```{r}
+#| eval: true
+#| message: false
+#| warning: false
+# Change to eval: TRUE in order to run
+library(caret)
+knn_fit <- train(Type ~ linearity + shift_level_max, 
+                 data = train_feats, method = "knn")
+test_pred <- predict(knn_fit, test_feats)
+
+# Compute accuracy
+confusion_matrix <- confusionMatrix(test_pred, test_feats$Type)
+accuracy <- confusion_matrix$overall["Accuracy"]
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+```
+
+## Question 4 (Periodograms)
+
+Consider the `vic_elec` dataset from the `tsibbledata` package.
+
+a.  Compute and plot the periodogram for `Demand`. What frequencies and periods do the 7 highest peaks correspond to? *Hint: You may use the* `periodogram` *function provided in* `plot_util.R` *and change the* `max_freq` *setting to see at different resolutions.*
+
+    ```{r}
+    #| include: false
+    require(rlang)
+    require(magrittr)
+
+
+    periodogram <- function(x, max_freq = 0.5) {
+      #' Plot a Periodogram for a Time Series
+      #'
+      #' This function takes a vector representing a time series,
+      #' and plots the periodogram of the time series.
+      #'
+      #' @param x A numeric vector representing the time series.
+      #' @param max_freq The max frequency to be plotted
+      #'
+      #' @return A ggplot object representing the periodogram of the time series.
+      #'
+      
+      # old_warn <- options(warn = -1)  # Disable warnings
+      n <- length(x)
+      freq <- 0 : (n - 1) / n
+      per <- Mod(fft(x - mean(x, na.rm = TRUE))) ^ 2
+      tibble(freq = freq, per = per) |>
+        ggplot(aes(x = freq, y = per)) +
+        geom_segment(aes(xend = freq, yend = 0)) +
+        labs(x = "Frequency", y = "Periodogram") +
+        theme_minimal() + xlim(0, max_freq)
+      # on.exit(options(old_warn))      # Restore warning setting on exit
+    }
+    ```
+
+    ```{r}
+    library(tsibbledata)
+    vic_elec_data <- vic_elec |>
+        as_tsibble() |>
+        rename(Day = Date, Value = Demand)
+    vic_elec_data |>
+        autoplot(.vars = Value)
+
+    #view(vic_elec)
+
+    demand_values <- vic_elec$Demand
+    demand_values |>
+      periodogram(max_freq = 0.08) 
+    demand_values |>
+      periodogram(max_freq = 0.02)
+    ```
+
+    From the periodogram, there are 7 peaks. f1​=0.02,f2​=0.0417,f3​=0.0025,f4​=0.0033,f5​=0.014f6,f7​=0.0833
+
+b.  Perform an STL decomposition for `Demand`. Plot the periodogram for `season_year`, `season_week`, and `season_day`. Which of the original periodogram peaks appear in each of these periodograms?
+
+    ```{r}
+    # Perform STL decomposition
+    stl_result <- vic_elec |> 
+      model(STL(Demand ~ season(window = "periodic"))) |> 
+      components()
+
+    stl_result|>
+      autoplot()
+
+    # Extract seasonal components
+    season_year <- stl_result$season_year
+    season_week <- stl_result$season_week
+    season_day <- stl_result$season_day
+
+    ```
+
+    ```{r}
+    # Compute and plot periodograms for seasonal components
+    p1 <- periodogram(season_year, max_freq = 0.06) + ggtitle("Periodogram of Season Year")
+    p2 <- periodogram(season_week, max_freq = 0.06) + ggtitle("Periodogram of Season Week")
+    p3 <- periodogram(season_day, max_freq = 0.06) + ggtitle("Periodogram of Season Day")
+
+    # Plot all periodograms together
+    library(gridExtra)
+    grid.arrange(p1, p2, p3, nrow = 3)
+
+    ```
+
+c.  Based on the peak heights, which is the strongest seasonal component? Does it agree with what you see in a time series decomposition plot?\
+    A peak at frequency **0.02** in the **season_day** periodogram suggests a repeating pattern in the daily electricity demand cycle. The frequency f=1/24≈0.0417 suggesting the period is daily. The presence of 0.02 instead of 0.0417 suggests some additional lower-frequency daily fluctuations, possibly influenced by business hours, work shifts, or temperature effects.
