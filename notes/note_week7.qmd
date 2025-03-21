@@ -61,9 +61,9 @@ If $U_1, U_2 \sim N(0,1)$, then the process is strictly stationary, since it is 
 
 ![](images/note7question1.jpg){width="1080"}
 
-------------------------------------------------------------------------
+![](images/note7question1-2.png){width="1080"}
 
-## 
+------------------------------------------------------------------------
 
 ## 2. ACF vs sample ACF
 
