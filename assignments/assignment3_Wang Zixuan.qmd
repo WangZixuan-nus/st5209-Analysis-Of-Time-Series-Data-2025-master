@@ -1,0 +1,378 @@
+---
+title: "ST5209/X Assignment 3"
+format: pdf
+editor: visual
+author: "Wang Zixuan,A0298286H"
+date: "2025-03-21"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+fontsize: 12pt
+mainfont: "Times New Roman"
+header-includes:
+  - \usepackage{titlesec}
+  - \usepackage{color}
+  - \usepackage{xcolor}
+  - \definecolor{DarkRed}{rgb}{0.6,0,0}
+  - \definecolor{DarkBlue}{rgb}{0,0,0.6}
+  - \titleformat{\section}{\Large\bfseries\color{DarkBlue}}{\thesection}{1em}{}
+  - \titleformat{\subsection}{\large\bfseries\color{DarkBlue}}{\thesubsection}{1em}{}
+  - \titleformat{\subsubsection}{\normalsize\bfseries\color{DarkBlue}}{\thesubsubsection}{1em}{}
+  - \setlength{\parindent}{0em}
+  - \setlength{\parskip}{1em}
+geometry: margin=1in
+---
+
+## Set up
+
+1.  Make sure you have the following installed on your system: $\text{\LaTeX}$, R4.2.2+, RStudio 2023.12+, and Quarto 1.3.450+.
+2.  Pull changes from the course [repo](https://github.com/yanshuotan/st5209-2024).
+3.  Create a separate folder in the root directory of the repo, label it with your name, e.g. `yanshuo-assignments`
+4.  Copy the assignment1.qmd file over to this directory.
+5.  Modify the duplicated document with your solutions, writing all R code as code chunks.
+6.  When running code, make sure your working directory is set to be the folder with your assignment .qmd file, e.g. `yanshuo-assignments`. This is to ensure that all file paths are valid.[^1]
+
+[^1]: You may view and set the working directory using `getwd()` and `setwd()`.
+
+## Submission
+
+1.  Render the document to get a .pdf printout.
+2.  Submit both the .qmd and .pdf files to Canvas.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+library(tidyverse)
+library(fpp3)
+```
+
+## 1. Holt-Winters, residuals, and forecast accuracy
+
+Consider the antidiabetic drug sales time series which can be loaded using the following code snippet.
+
+```{r}
+diabetes <- read_rds("../_data/cleaned/diabetes.rds") |>
+  select(TotalC)
+```
+
+a.  Fit the following exponential smoothing models on the entire time series:
+    -   Holt-Winters with multiplicative noise and seasonality,
+
+        for general recipe : \``ETS(X~error(01）+trend(02)+season(03)`\`
+
+        01 is set to be "M" - noise to be multiplicative.
+
+        02 is set to be "A" - linear trend.
+
+        03 is set to be "M" - multiplicative seasonal component
+
+    -   Holt-Winters with a log transformation, with additive noise and seasonality,
+
+        01 is set to be "A" - noise to be additive .
+
+        02 is set to be "A" - linear trend.
+
+        03 is set to be "A" - additive seasonal component
+
+    -   Holt-Winters with multiplicative noise and seasonality, and damping.
+
+        01 is set to be "M" - noise to be multiplicative .
+
+        02 is set to be "Ad" - damped linear trend.
+
+        03 is set to be "M" - multiplicativeseasonal component
+
+```{r}
+diabetes <- diabetes |> 
+  as_tsibble()
+
+dia_fit <- diabetes |> 
+  model(model1 = ETS(TotalC ~ error("M") + trend("A") + season("M")),
+        model2 = ETS(log(TotalC) ~ error("A") + trend("A") + season("A")),
+        model3 = ETS(TotalC ~ error("M") + trend("Ad") + season("M"))
+        )
+```
+
+a.  Make ACF plots for the innovation residuals of these three models. Does this suggest that the residuals are drawn from a white noise model?
+
+    ```{r}
+    dia_fit |>
+      select(model1) |> 
+      gg_tsresiduals()
+
+    dia_fit |>
+      select(model2) |> 
+      gg_tsresiduals()
+
+    dia_fit |>
+      select(model3) |> 
+      gg_tsresiduals()
+    ```
+
+    These residuals do not conform to a white noise model because their ACF exceeds the blue lines and displays a certain periodicity.
+
+b.  Calculate the p-value from a Ljung-Box test on the residuals with lag $h=8$. Does this suggest that the residuals are drawn from a white noise model? What does this mean about the fitted model?
+
+    ```{r}
+    dia_fit |>
+        augment() |>
+        features(.innov, ljung_box, lag = 8)
+    ```
+
+    All the p_values are smaller than 0.05. We can reject the null hypothesis. In other words, the models seem to have a bad fit to the data.
+
+c.  Perform time series cross-validation for the three methods, using `.init = 50` and `.step = 10`, and with the forecast horizon $h=4$. Which method has the best RMSSE? How many data points is the error averaged over in total?
+
+    ```{r}
+    dia_cv <- diabetes |>
+      stretch_tsibble(.step = 10, .init = 50) |>
+      model(model1 = ETS(TotalC ~ error("M") + trend("A") + season("M")),
+            model2 = ETS(log(TotalC) ~ error("A") + trend("A") + season("A")),
+            model3 = ETS(TotalC ~ error("M") + trend("Ad") + season("M"))
+            )
+            
+    dia_fc <- dia_cv |> 
+      forecast(h = 4)
+
+    dia_fc |>
+      accuracy(diabetes) |>
+      select(.model, RMSSE)
+    ```
+
+    Holt-Winters with a log transformation, with additive noise and seasonality has the lowest RMSSE.
+
+```{r}
+n <- nrow(diabetes)
+steps <- ceiling((n - 50) / 10)
+steps * 4
+```
+
+The error averaged over 64 data points.
+
+## 2. ETS parameters, prediction intervals
+
+The dataset `hh_budget` contains annual indicators of household budgets for a few countries.
+
+a.  Fit `ETS` on the time series comprising savings as a portion of household budgets in Canada. Do not specify what type of ETS model to fit, instead allowing the function to perform automatic model selection.
+
+    ```{r}
+    sav_can <- hh_budget |>
+      select(Savings) |>
+      filter(Country == "Canada")
+
+    sav_fit <- sav_can |>
+      model(ETS(Savings))
+    ```
+
+b.  Which ETS model was selected?
+
+    ```{r}
+    sav_fit
+    ```
+
+    ETS model selected Holt-Winters with with additive noise without trend or seasonality automately.
+
+c.  What are the fitted parameters of the model?
+
+    ```{r}
+    sav_fit |>
+      tidy()
+    ```
+
+    The fitted parameters is $\alpha = 0.99989$
+
+d.  Based on the fitted parameters, what simple forecasting method is this similar to?
+
+    The fitted parameters is $\alpha = 0.99989$, which is so close to 1. So this model is similar to the naive method.
+
+e.  Based on your answer to d), how does the width of the prediction interval change as a function of the forecast horizon $h$? Make a plot to verify this.
+
+    ```{r}
+    sav_fit |>
+      forecast(h = 10) |>
+      autoplot()
+    ```
+
+The interval width grows with forecatst horizon grows: $\sqrt{h}$.
+
+## 3. Moving averages and differences
+
+Consider the linear trend model $$
+X_t = \beta_0 + \beta_1 t + W_t.
+$$ Define a time series $(Y_t)$ by taking a moving average of $(X_t)$ with a symmetric window of size 7. Define another times series $(Z_t)$ by taking a difference of $(X_t)$.
+
+a.  What is the mean function for $(Y_t)$? What is the ACVF for $(Y_t)$?
+    -   $$
+        Y_{t} = \frac{1}{7}\sum_{i=t-3}^{t+3}X_{i}.
+        $$
+
+        The mean function for ($Y_{t}$) is
+
+        $$
+        E(Y_{t}) =\beta_{0}+\beta_1t.
+        $$
+
+        ACVF:
+
+        $$
+        \gamma_Y(h)=Cov(Y_t,Y_{t+h}) = \sigma^2\frac{7-|h|}{49},\ \text{for}\ |h|\leq7, 
+        $$
+
+        $$
+        \gamma_Y(h)=0,\ \text{otherwise}.
+        $$
+b.  What is the mean function for $(Z_t)$? What is its ACVF?
+
+$$
+Z_t=X_t-X_{t-1}.
+$$
+
+$$
+E(Z_t)=(\beta_0+\beta_1t)-(\beta_0+\beta_1(t-1))=\beta_1.
+$$
+
+$$
+\gamma_Z(h)=Cov(Z_t,Z_{t+h})=Var(Z_t)=2\sigma^2,\ \text{for}\ h=0; 
+$$
+
+$$
+\gamma_Z(h)=-\sigma^2,\ \text{for}\ |h|=1;
+$$
+
+$$
+\gamma_Z(h)=0, \ otherwise  .
+$$
+
+a.  What is the CCF of $(Y_t)$ and $(Z_t)$?
+
+$$
+\gamma_{YZ}(h)=\frac{\sigma^2}{7}\ \text{for}\ h=3,
+$$
+
+$$
+\gamma_{YZ}(h)=-\frac{\sigma^2}{7}\ \text{for}\ h=-4,
+$$
+
+$$
+\gamma_{YZ}(h)=0\ \text{otherwize}.
+$$
+
+$$
+\gamma_{Y}(0)=\frac{\sigma^2}{7}
+$$
+$$
+\gamma_{Z}(0)=2{\sigma^2}
+$$
+
+$$\rho_{YZ}=1/\sqrt14 for h = 3$$
+
+$$\rho_{YZ}=-1/\sqrt14 for h =-4$$
+$$
+\rho_{YZ}=0\ \text{otherwize}.
+$$
+
+a.  Are $(Y_t)$ and $(Z_t)$ jointly stationary?
+
+    Since $(Y_t)$ contains a trend, it is not stationary. $(Z_t)$ is stationary since the process of difference removed the trend. $(Y_t)$ is stationary while $(Z_t)$ is not, they are not jointly stationary.
+
+## 4. Sample vs population ACF
+
+Consider the signal plus noise model $$
+X_t = \sin(2\pi t/5) + W_t.
+$$
+
+a.  What is the ACF of $(X_t)$?
+
+    $(W_t)$ is white noise, $(W_t)$ and $(W_{t-k})$ $(k\neq0)$ are uncorrelated. Therefore, $(X_t)$ and $(W_t-k)$ $(k\neq0)$ are not correlated.
+
+$$
+\rho_x(k)=1\ \text{for} \ k=0;
+$$
+
+$$
+\rho_x(k)=0\ \text{otherwise}.
+$$
+
+a.  Simulate a time series $X_1,X_2,\ldots,X_{200}$ from this model and plot its sample ACF.
+
+    ```{r}
+    set.seed(5209)
+    n <- 200
+    X_t <- tibble(id = 1:n,
+                  xt = sin(2 * pi * id/5) + 
+                    rnorm(n, mean = 0, sd = 1)) |>
+      as_tsibble(index = id)
+
+    X_t |>
+      ACF(xt) |>
+      autoplot()
+    ```
+
+b.  Why does the sample ACF not look like the population ACF function?
+
+    The mean function is not constant, so the time series is not weak stationary. So the sample ACF is different from the population ACF.
+
+c.  Why does the asymptotic normality theorem for the ACF not apply?
+
+    Because the time series is not stationary. The mean function is not constant.
+
+## 5. Gaussian processes
+
+Consider a random vector $(X_1,X_2,X_3,X_4)$ that has the joint Gaussian distribution
+
+$$
+\begin{bmatrix} X_1 \\ X_2 \\ X_3 \\ X_4\end{bmatrix} \sim N\left(\begin{bmatrix} -0.5 \\ 0 \\ 0.5 \\ 2\end{bmatrix}, \begin{bmatrix} 3 & 1 & 1 & 1 \\ 1 & 3 & 1 & 1 \\ 1 & 1 & 3 & 2 \\ 1 & 1 & 2 & 3\end{bmatrix} \right)
+$$
+
+a.  What is the marginal variance of $X_4$?
+
+    The marginal variance of $X_4$ is 3.
+
+b.  What is the conditional variance of $X_4$, conditioned on the observations $X_1=1,X_2=1,X_3=1$. Does it depend on these particular values? *Hint: The following code snippet creates matrix in R. You may use `solve()` to find the inverse of a matrix.*
+
+    ```{r}
+    Sigma <- matrix(c(3, 1, 1, 1,
+                      1, 3, 1, 1,
+                      1, 1, 3, 2,
+                      1, 1, 2, 3), nrow=4, byrow=TRUE)
+
+    Sigma_AA <- Sigma[1:3, 1:3]  # Covariance of X1, X2, X3
+    Sigma_AB <- Sigma[1:3, 4]     # Covariance between (X1, X2, X3) and X4
+    Sigma_BB <- Sigma[4, 4]       # Variance of X4
+
+    Sigma_AA_inv <- solve(Sigma_AA)
+
+    cond_var_X4 <- Sigma_BB - t(Sigma_AB) %*% Sigma_AA_inv %*% Sigma_AB
+
+    cond_var_X4
+    ```
+
+c.  What is the conditional mean of $X_4$, conditioned on the observations $X_1=1,X_2=1,X_3=1$?
+
+    ```{r}
+    mu <- c(-0.5, 0, 0.5, 2)
+    X_A <- c(1, 1, 1)
+
+
+    mu_A <- mu[1:3]          # Mean vector of X1, X2, X3
+    mu_B <- mu[4]            # Mean of X4
+    Sigma_AA <- Sigma[1:3, 1:3]  # Covariance matrix of X1, X2, X3
+    Sigma_AB <- Sigma[1:3, 4]     # Covariance vector between (X1, X2, X3) and X4
+
+
+    cond_mean_X4 <- mu_B + t(Sigma_AB) %*% solve(Sigma_AA) %*% (X_A - mu_A)
+
+    cond_mean_X4
+    ```
+
+d.  Write a level 95% prediction interval for $X_4$ given these observations.
+
+```{r}
+lower_bound <- cond_mean_X4 - sqrt(cond_var_X4) * 1.96
+upper_bound <- cond_mean_X4 + sqrt(cond_var_X4) * 1.96
+
+# Print the result
+cat("95% Prediction Interval for X4:", lower_bound, "to", upper_bound, "\n")
+```
