@@ -1,46 +1,43 @@
----
-title: "Week 2 note"
-author: "Wang Zixuan"
-output: 
-  pdf_document:
-    toc: true
-    number_sections: true
-editor: visual
----
-
-# **4  Transformations**
-
-# **5  Time Series Decomposition**
-
-# PRE Video:
-
-## Set up
-
-We always load the following packages.
-
-```{r}
+# ---
+# title: "Week 2 note"
+# author: "Wang Zixuan"
+# output: 
+#   pdf_document:
+#     toc: true
+#     number_sections: true
+# editor: visual
+# ---
+# 
+# # **4  Transformations**
+# 
+# # **5  Time Series Decomposition**
+# 
+# # PRE Video:
+# 
+# ## Set up
+# 
+# We always load the following packages.
+# 
 #| message: FALSE
 library(fpp3)
 library(tidyverse)
-```
-
-## 4 Transformations
-
-### 4.1 Lags
-
-`lag()` function is used to create **lagged values** of a vector or time series. Lagging means shifting the data forward or backward by a specified number of steps, which is particularly useful in time series analysis or other contexts where you want to compare current and past values.
-
-lag(x, k = 1)
-
--   **`x`**: The input vector or time series.
-
--   **`k`**: The number of steps to lag by (default is 1).
-
-    -   **Positive values**: Shift the data backward (create lagged values).
-
-    -   **Negative values**: Shift the data forward.
-
-```{r}
+# 
+# ## 4 Transformations
+# 
+# ### 4.1 Lags
+# 
+# `lag()` function is used to create **lagged values** of a vector or time series. Lagging means shifting the data forward or backward by a specified number of steps, which is particularly useful in time series analysis or other contexts where you want to compare current and past values.
+# 
+# lag(x, k = 1)
+# 
+# -   **`x`**: The input vector or time series.
+# 
+# -   **`k`**: The number of steps to lag by (default is 1).
+# 
+#     -   **Positive values**: Shift the data backward (create lagged values).
+# 
+#     -   **Negative values**: Shift the data forward.
+# 
 x <- c(10, 20, 30, 40, 50)
 
 # Lag by 1 step
@@ -50,9 +47,7 @@ lag(x, 1)
 # Lag by 2 steps
 lag(x, 2)
 # Output: NA NA 10 20 30
-```
-
-```{r}
+# 
 ?lag() #Compute lagged or leading values
 lag(1:5)
 x <- 1:5
@@ -63,30 +58,24 @@ lag(1:5, n = 2)
 
 lead(1:5, n = 1)
 lead(1:5, n = 2)
-```
-
-Example: aus_arrivals
-
-```{r}
+# 
+# Example: aus_arrivals
+# 
 aus_arrivals |> 
     group_by(Origin) |> 
     mutate(LaggedArrivals = lag(Arrivals)) |> 
     ungroup()
-```
-
-Lag plots
-
-```{r}
+# 
+# Lag plots
+# 
 aus_arrivals |> filter(Origin == "Japan") %>%
   gg_lag(y = Arrivals, geom = "point") +
   scale_x_continuous(labels = function(x) paste0(x/1000,"k"))+ 
   scale_y_continuous(labels = function(x) paste0(x /
 1000,"k"))
-```
-
-## Differencing
-
-```{r}
+# 
+# ## Differencing
+# 
 #?difference()
 difference(x=1:10, lag=2)
 difference(1:10, 2, 2)
@@ -110,17 +99,13 @@ diff(x, differences = 2)
 sales <- ts(c(100, 120, 150, 200, 250), start = c(2023, 1), frequency = 12)
 # Compute monthly sales changes
 diff(sales)
-```
-
-```{r}
+# 
 aus_arrivals |>
   group_by(Origin)|>
   mutate(ArrivalsDiff = difference(Arrivals))|>
   ungroup()
 
-```
-
-```{r}
+# 
 plt1 <- aus_arrivals |>
   filter(Origin == "Japan") |>
   autoplot()
@@ -131,24 +116,20 @@ plt2 <- aus_arrivals |>
 library(gridExtra)
 grid.arrange(plt1, plt2, nrow = 2)
 
-```
-
-### 4.4 Box-cox transformations
-
-```{r}
+# 
+# ### 4.4 Box-cox transformations
+# 
 lambda <- aus_production |>
   features(Gas, features = guerrero) |>
   pull(lambda_guerrero)
 aus_production |>
   autoplot(box_cox(Gas, lambda))
 ?guerrero()
-```
-
-### 4.5 Aggregation
-
-energy demand in Victoria, Australia in January 2013
-
-```{r}
+# 
+# ### 4.5 Aggregation
+# 
+# energy demand in Victoria, Australia in January 2013
+# 
 #head(vic_elec)
 #original time series
 elec_filtered <- vic_elec |>
@@ -165,11 +146,9 @@ plt2 <- elec_filtered |>
   ggtitle("aggregated time series")
 
 grid.arrange(plt1, plt2, nrow = 2)
-```
-
-### 4.6 Moving averages
-
-```{r}
+# 
+# ### 4.6 Moving averages
+# 
 library(slider)
 
 elec_filtered <- vic_elec |>
@@ -180,13 +159,11 @@ plt3 <- elec_filtered |> autoplot(Demand) +
     geom_line(aes(y = DemandMA48), color = "red")
 plt3
 grid.arrange(plt3, plt2, nrow = 2)
-```
-
-### 4.7 **Rolling window transformations**
-
-compute the standard deviation over the window, as shown in the example below for google stock prices.
-
-```{r}
+# 
+# ### 4.7 **Rolling window transformations**
+# 
+# compute the standard deviation over the window, as shown in the example below for google stock prices.
+# 
 goog <- read_csv("../_data/cleaned/GOOG.csv") |> as_tsibble()
 goog_rolling <- goog |>
     mutate(CloseMA21 = slide_dbl(Close, mean, .before = 10, .after = 10),
@@ -201,47 +178,37 @@ plt2 <- goog_rolling |>
     geom_line(aes(x = Date, y = CloseSd21), color = "blue")
 
 grid.arrange(plt1, plt2, nrow = 2)
-```
-
-### 4.8 **Calendar adjustment**
-
-```{r}
+# 
+# ### 4.8 **Calendar adjustment**
+# 
 #milk <- read_rds(str_c(CLEANED_DIR, "milk.rds"))
 #autoplot(milk, .vars = value)
-```
-
-```{r}
+# 
 #gg_season(milk, y = value, labels = "left")
-```
-
-```{r}
+# 
 #mutate(milk, adj_prod = value / days_in_month(index)) |>  
 #  gg_season(y = adj_prod, labels = "left")
-```
-
-### 4.10 **Population adjustment**
-
-`covid_data_2021 <- read_rds(str_c(CLEANED_DIR, "covid_usa_zaf_fra.rds")) |> filter(between(date, ymd("2021-01-01"), ymd("2021-12-31"))) |> select(1:4, 20, 21)`
-
-`plt1 <- autoplot(covid_data_2021, .vars=hosp_patients) + labs(x="Month", y="Hospital Patients") + scale_color_discrete(labels=c("USA", "South Africa"))`
-
-`plt2 <- autoplot(covid_data_2021, .vars=hosp_patients_per_million) + labs(x="Month", y="Hospital Patients per Million") + scale_color_discrete(labels=c("USA", "South Africa"))`
-
-`grid.arrange(plt1, plt2, nrow = 2)`
-
-## 4.11 **Inflation adjustment**
-
-## **5.Time Series Decomposition**
-
-### Applying classical decomposition
-
-```{r}
+# 
+# ### 4.10 **Population adjustment**
+# 
+# `covid_data_2021 <- read_rds(str_c(CLEANED_DIR, "covid_usa_zaf_fra.rds")) |> filter(between(date, ymd("2021-01-01"), ymd("2021-12-31"))) |> select(1:4, 20, 21)`
+# 
+# `plt1 <- autoplot(covid_data_2021, .vars=hosp_patients) + labs(x="Month", y="Hospital Patients") + scale_color_discrete(labels=c("USA", "South Africa"))`
+# 
+# `plt2 <- autoplot(covid_data_2021, .vars=hosp_patients_per_million) + labs(x="Month", y="Hospital Patients per Million") + scale_color_discrete(labels=c("USA", "South Africa"))`
+# 
+# `grid.arrange(plt1, plt2, nrow = 2)`
+# 
+# ## 4.11 **Inflation adjustment**
+# 
+# ## **5.Time Series Decomposition**
+# 
+# ### Applying classical decomposition
+# 
 aus_arrivals |>
   filter(Origin == "UK") |>
   autoplot()
-```
-
-```{r}
+# 
 #tourist arrivals to Australia from the UK
 aus_arrivals |>
     filter(Origin == "UK") |>
@@ -252,9 +219,7 @@ aus_arrivals |>
     autoplot()+
   labs(
     title = "Tourist Arrivals to Australia from the UK")
-```
-
-```{r}
+# 
 #tourist arrivals to Australia from the UK
 aus_arrivals |>
     filter(Origin == "Japan") |>
@@ -265,13 +230,11 @@ aus_arrivals |>
     autoplot()+
   labs(
     title = "Tourist Arrivals to Australia from Japan")
-```
-
-### 5.5 **Advanced decompositions**
-
-STL method
-
-```{r}
+# 
+# ### 5.5 **Advanced decompositions**
+# 
+# STL method
+# 
 aus_arrivals |>
     filter(Origin == "Japan") |>
     model(
@@ -280,9 +243,7 @@ aus_arrivals |>
     autoplot()+
   labs(
     title = "Tourist Arrivals to Australia from Japan")
-```
-
-```{r}
+# 
 vic_elec |>
     filter(year(Time) == 2013, month(Time) %in% c(1,2)) |> 
     model(
@@ -293,40 +254,34 @@ vic_elec |>
     autoplot()+
   labs(
     title = "Energy demand in Victoria, Australia in January and February 2013")
-```
-
-# Class:
-
-## Lags and differencing
-
-Let's consider the `aus_arrivals` dataset and try to plot lagged arrival values.
-
-```{r}
+# 
+# # Class:
+# 
+# ## Lags and differencing
+# 
+# Let's consider the `aus_arrivals` dataset and try to plot lagged arrival values.
+# 
 aus_arrivals |>
   mutate(LaggedArrivals = lag(Arrivals)) |>
   autoplot(LaggedArrivals)
-```
-
-Something seems a bit odd about this plot, especially the UK value. What is happening is that the lag function has treated the entire column as a single time series even though it contains 4 separate time series. To avoid this, we need to do a `group_by()` before applying mutate
-
-Apply transformation:
-
-```{r}
+# 
+# Something seems a bit odd about this plot, especially the UK value. What is happening is that the lag function has treated the entire column as a single time series even though it contains 4 separate time series. To avoid this, we need to do a `group_by()` before applying mutate
+# 
+# Apply transformation:
+# 
 aus_arrivals |>
   group_by(Origin) |>
   mutate(LaggedArrivals = lag(Arrivals)) |>
   ungroup() |>
   autoplot(LaggedArrivals)
 #autoplot(): need to sepecift the variable you want to plot
-```
-
-AT the first quater, 2 plot change.
-
-## Moving averages
-
-Let's focus on the arrivals from Japan time series and compute moving averages.
-
-```{r}
+# 
+# AT the first quater, 2 plot change.
+# 
+# ## Moving averages
+# 
+# Let's focus on the arrivals from Japan time series and compute moving averages.
+# 
 library(slider)
 
 aus_jap_arrivals <- aus_arrivals |> 
@@ -334,11 +289,9 @@ aus_jap_arrivals <- aus_arrivals |>
   mutate(MA2 = slide_dbl(Arrivals, mean, .before = 1, .after = 0),#dbl="double", window size = 2
          MA2_alt = (Arrivals + lag(Arrivals)) / 2)
 aus_jap_arrivals
-```
-
-Manually computing the moving average shows that the formula is correct. We now compute moving averages with a few different window sizes to see the effect of varying the window size.
-
-```{r}
+# 
+# Manually computing the moving average shows that the formula is correct. We now compute moving averages with a few different window sizes to see the effect of varying the window size.
+# 
 library(slider)
 library(viridis)
 
@@ -349,99 +302,81 @@ aus_jap_arrivals <- aus_arrivals |>
          ArrivalsMA4 = slide_dbl(Arrivals, mean, .before = 2, .after = 1),
          ArrivalsMA6 = slide_dbl(Arrivals, mean, .before = 3, .after = 2),
          ArrivalsMA8 = slide_dbl(Arrivals, mean, .before = 4, .after = 3))
-```
-
-We can plot them individually, or plot all versions on the same plot.
-
-```{r}
+# 
+# We can plot them individually, or plot all versions on the same plot.
+# 
 aus_jap_arrivals |> select(-Origin) |>
   pivot_longer(cols = contains("Arrivals"), names_to = "Type") |>
   autoplot(value) + scale_color_viridis(discrete = TRUE)
-```
-
-**The bigger widow size, the smoother time seires.**
-
-There's a bit of overplotting here, but we generally see that the time series becomes smoother as we **increase the window size**. This is similar to bandwidth selection for kernel smoothing. On the other hand, MA4 seems to be **smoother** than MA6 (see the figure below). This is because the seasonality has period 4, which is averaged out when the window size of the moving average is a multiple of 4, but not otherwise.
-
-In the plot, maybe 4 or 6 is the appropriate widow size.
-
-We need to pick a window size which is multiple of season preriods.
-
-```{r}
+# 
+# **The bigger widow size, the smoother time seires.**
+# 
+# There's a bit of overplotting here, but we generally see that the time series becomes smoother as we **increase the window size**. This is similar to bandwidth selection for kernel smoothing. On the other hand, MA4 seems to be **smoother** than MA6 (see the figure below). This is because the seasonality has period 4, which is averaged out when the window size of the moving average is a multiple of 4, but not otherwise.
+# 
+# In the plot, maybe 4 or 6 is the appropriate widow size.
+# 
+# We need to pick a window size which is multiple of season preriods.
+# 
 aus_jap_arrivals |> select(-Origin) |>
   pivot_longer(cols = contains("Arrivals"), names_to = "Type") |>
   autoplot(value) + scale_color_viridis(discrete = TRUE)
-```
-
-```{r}
+# 
 aus_jap_arrivals |> select(-Origin) |>
   pivot_longer(cols = all_of(c("Arrivals", "ArrivalsMA4", "ArrivalsMA6")), 
                names_to = "Type") |>
   autoplot(value) + scale_color_viridis(discrete = TRUE)
-```
-
-## Log transform and differencing
-
-Let's consider the turnover for clothes sales in Victoria, Australia.
-
-```{r}
+# 
+# ## Log transform and differencing
+# 
+# Let's consider the turnover for clothes sales in Victoria, Australia.
+# 
 diabetes <- read_rds("../_data/cleaned/diabetes.rds")
 diabetes |> autoplot()
-```
-
-```{r}
+# 
 diabetes |> gg_season()
-```
-
-The seasonal fluctuations **grow** with the level of the time series, so we shall apply a log transformation.
-
-Why we apply transformation?
-
-1.  To seperate the seasonality and the trend.
-2.  stablize standard deviation
-3.  Reduce the impact of outliers.
-
-We apply a log transformation
-
-```{r}
+# 
+# The seasonal fluctuations **grow** with the level of the time series, so we shall apply a log transformation.
+# 
+# Why we apply transformation?
+# 
+# 1.  To seperate the seasonality and the trend.
+# 2.  stablize standard deviation
+# 3.  Reduce the impact of outliers.
+# 
+# We apply a log transformation
+# 
 diabetes |> 
   mutate(logTotalC = log(TotalC)) |>
   autoplot(logTotalC)
-```
-
-The trends become linear. Seasonal fluctuation not increase
-
-This is much better now. Let us now **take differences: remove the trend**
-
-```{r}
+# 
+# The trends become linear. Seasonal fluctuation not increase
+# 
+# This is much better now. Let us now **take differences: remove the trend**
+# 
 diabetes |> 
   mutate(logTotalC = log(TotalC)) |>
   mutate(logDiffTotalC = difference(logTotalC)) |>
   autoplot(logDiffTotalC)
-```
-
-This measures the percentage *month-on-month* increase in sales of diabetes drugs. The time series still seems to be quite seasonal.
-
-To see the changes between years:
-
-What happens if we take a seasonal difference?
-
-```{r}
+# 
+# This measures the percentage *month-on-month* increase in sales of diabetes drugs. The time series still seems to be quite seasonal.
+# 
+# To see the changes between years:
+# 
+# What happens if we take a seasonal difference?
+# 
 diabetes |> 
   mutate(logTotalC = log(TotalC)) |>
   mutate(logSeasonalDiffTotalC = difference(logTotalC, 12)) |>
   autoplot(logSeasonalDiffTotalC)
-```
-
-It measures the *year-on-year* percentage increase in sales of diabetes drugs. The seasonality has disappeared! This series is also much more stable, see the y-axis limits.
-
-The year-on-year percentage change seems to be constant. Around 0.15.
-
-## 4. Computing classical decomposition
-
-Compute a classical decomposition for the following time series without using the `classical_decomposition()` function.
-
-```{r}
+# 
+# It measures the *year-on-year* percentage increase in sales of diabetes drugs. The seasonality has disappeared! This series is also much more stable, see the y-axis limits.
+# 
+# The year-on-year percentage change seems to be constant. Around 0.15.
+# 
+# ## 4. Computing classical decomposition
+# 
+# Compute a classical decomposition for the following time series without using the `classical_decomposition()` function.
+# 
 aus_arrivals_jap <- aus_arrivals |>
   filter(Origin == "Japan") |>
   select(Quarter, Arrivals)
@@ -449,45 +384,35 @@ aus_arrivals_jap <- aus_arrivals |>
 #if use:classical_decomposition
 aus_arrivals_jap |>
   model(classical_decomposition()) 
-```
-
-We first create a trend and detrended columns.
-
-```{r}
+# 
+# We first create a trend and detrended columns.
+# 
 detrended <- aus_arrivals_jap |> 
   mutate(ArrivalsTrend = slide_dbl(Arrivals, mean, .before = 4, .after = 3),
          ArrivalsDetrended = Arrivals - ArrivalsTrend)
-```
-
-Use linear regression to reduce season **trend**. Add dummies for the quarters.
-
-```{r}
+# 
+# Use linear regression to reduce season **trend**. Add dummies for the quarters.
+# 
 temp <- detrended |>
   mutate(Q1 = quarter(Quarter) == 1,
          Q2 = quarter(Quarter) == 2, 
          Q3 = quarter(Quarter) == 3,
          Q4 = quarter(Quarter) == 4,)
-```
-
-Compute seasonal and remainder components.
-
-```{r}
+# 
+# Compute seasonal and remainder components.
+# 
 hard_decomp <- detrended |> 
   mutate(ArrivalsSeasonal = lm(ArrivalsDetrended ~ Q1 + Q2 + Q3, temp)$fitted,
          ArrivalsRemainder = ArrivalsDetrended - ArrivalsSeasonal)
-```
-
-Let us now run the automatic classical decomposition.
-
-```{r}
+# 
+# Let us now run the automatic classical decomposition.
+# 
 auto_decomp <- aus_arrivals_jap |>
   model(classical_decomposition(Arrivals)) |>
   components()
-```
-
-Comparing the two...
-
-```{r}
+# 
+# Comparing the two...
+# 
 
 library(gridExtra)
 
@@ -510,61 +435,49 @@ plt3 <- hard_decomp |>
             mapping = aes(y = random), color = "blue")
 
 grid.arrange(plt1, plt2, plt3, nrow = 3)
-```
-
-Quite similar. Some minor differences probably because of different window size for trend.
-
-## 5. Classical vs STL decomposition
-
-Classical decomposition can be done by hand, but there are some questions. To solve the questions, we can use STL decomposition.
-
-Start with the following code snippet creating a time series of passengers flying on Ansett Airlines. Perform classical and STL decompositions and comment on their differences. Which do you trust more?
-
-```{r}
+# 
+# Quite similar. Some minor differences probably because of different window size for trend.
+# 
+# ## 5. Classical vs STL decomposition
+# 
+# Classical decomposition can be done by hand, but there are some questions. To solve the questions, we can use STL decomposition.
+# 
+# Start with the following code snippet creating a time series of passengers flying on Ansett Airlines. Perform classical and STL decompositions and comment on their differences. Which do you trust more?
+# 
 melsyd_economy <- ansett |>
   filter(Airports == "MEL-SYD", Class == "Economy") |>
   mutate(Passengers = Passengers/1000)
 autoplot(melsyd_economy, Passengers) +
   labs(y = "Passengers ('000)")
-```
-
-If we try to compute a decomposition directly, we get an error saying that there are missing values. Let's first find the missing value and then fill it.
-
-Use classical decomposition\
-1.Use moving average -\> on the start and end part, there is no data.
-
-2.We assume the seaonality is fixed.
-
-3.Outliers (0 passengers) impact trend and seasonal components
-
-```{r}
+# 
+# If we try to compute a decomposition directly, we get an error saying that there are missing values. Let's first find the missing value and then fill it.
+# 
+# Use classical decomposition\
+# 1.Use moving average -\> on the start and end part, there is no data.
+# 
+# 2.We assume the seaonality is fixed.
+# 
+# 3.Outliers (0 passengers) impact trend and seasonal components
+# 
 #melsyd_economy |>
 #  model(classical_decomposition(Passengers)) |>
 #  components()
 
-```
-
-```{r}
+# 
 melsyd_economy |>
   scan_gaps()
 # Missing entry is 1987 W38
-```
-
-```{r}
+# 
 melsyd_economy |>
   filter_index("1987 W35" ~ "1987 W40")
-```
-
-Considering the nearby values, it seems reasonable to impute the mean of the preceding and succeeding weeks.
-
-```{r}
+# 
+# Considering the nearby values, it seems reasonable to impute the mean of the preceding and succeeding weeks.
+# 
 melsyd_economy <- melsyd_economy |>
   fill_gaps(Passengers = (21.9 + 23.8) / 2)
-```
-
-We now perform classical and STL decompositions.
-
-```{r}
+# 
+# We now perform classical and STL decompositions.
+# 
 plt1 <- melsyd_economy |>
   model(classical_decomposition(Passengers)) |>
   components() |>
@@ -576,10 +489,9 @@ plt2 <- melsyd_economy |>
   autoplot()
 
 grid.arrange(plt1, plt2, nrow = 2)
-```
-
-Here, we see that for **classical decomposition**, the zero passenger numbers between W34 and W40 in 1989 have caused a sharp downward shift over W34 to W40 in the seasonal component and also a significant dip in the trend component. This is undesirable because we know that these numbers are outliers---they are the result of an event that will not be repeated again (or at least that cannot be forecasted the available data).
-
-In comparison, the **STL decomposition,** after setting the option `robust = TRUE`, is able to put this portion of the time series entirely into the remainder component. In the STL model, **outliers** do not affect the seasonality and trend.
-
-Furthermore, note that the classical decomposition is **not able to estimate the trend component at the very start** and end of the time series, while STL is able to do so.
+# 
+# Here, we see that for **classical decomposition**, the zero passenger numbers between W34 and W40 in 1989 have caused a sharp downward shift over W34 to W40 in the seasonal component and also a significant dip in the trend component. This is undesirable because we know that these numbers are outliers---they are the result of an event that will not be repeated again (or at least that cannot be forecasted the available data).
+# 
+# In comparison, the **STL decomposition,** after setting the option `robust = TRUE`, is able to put this portion of the time series entirely into the remainder component. In the STL model, **outliers** do not affect the seasonality and trend.
+# 
+# Furthermore, note that the classical decomposition is **not able to estimate the trend component at the very start** and end of the time series, while STL is able to do so.
