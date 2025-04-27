@@ -1,8 +1,13 @@
 ---
-title: "Week 1 Demonstration"
-format: html
+title: "Week 1 note"
+author: "Wang Zixuan"
+format: pdf
 editor: visual
 ---
+
+# **2  Data Wrangling**
+
+# **3  Visualizations**
 
 # pre-reading
 
@@ -128,7 +133,7 @@ Year
 ```{r}
 vic_elec |> gg_season(Demand, period = "year") +
   theme(legend.position = "none") +
-  labs(y="MWh", title="Electricity demand: Victoria"
+  labs(y="MWh", title="Electricity demand: Victoria")
 ```
 
 ## **3.3 Seasonal subseries plots**
@@ -155,8 +160,7 @@ library(tidyverse)
 Download this [dataset](https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption) on energy consumption from Kaggle. Save it into the raw data folder. Load the dataset and try to turn it into a tsibble `elec_consumption`. What error do you get? Try to deal with it.
 
 ```{r}
-setwd("D:/AAnus/semester2/ST5209X Analysis Of Time Series Data")
-elec_consumption <- read_csv("_data/AEP_hourly.csv")
+elec_consumption <- read_csv("../_data/raw/AEP_hourly.csv")
 ```
 
 Turn it into a tsibble. And we recieve an error.
@@ -198,7 +202,7 @@ Let us now compute a time plot:
 elec_consumption |> autoplot()
 ```
 
-reduce some data - shorten to 2 years... use **filter**
+reduce some data - shorten to 2 years... use **filter_index**
 
 There is clearly too much going on here. What can we do to visualize the time series better?
 
@@ -245,9 +249,23 @@ This plot is still quite noisy, so let's make seasonal plots.
 Make a seasonal plot of `elec_consumption`. You should experience an error. How can you fix it? What period did **`gg_season()`** automatically select? Try changing the period. Interpret the patterns observed in all your plots.
 
 ```{r}
+#| eval: FALSE
 elec_consumption |> 
   gg_season()
 ```
+
+Oops, there's an error again. Let's inspect the error message.
+
+```{r}
+#| eval: FALSE
+Plot variable not specified, automatically selected `y = AEP_MW`Error in `check_gaps()`:
+! data contains implicit gaps in time. You should check your data and convert implicit gaps into explicit missing values using `tsibble::fill_gaps()` if required.
+Backtrace:
+ 1. feasts::gg_season(elec_consumption)
+ 2. feasts:::check_gaps(data)
+```
+
+It says that there are gaps in the time index. This is unsurprising, because of daylight savings.
 
 Missing data: two types, **explicit missing data** and **implicit missing data**
 
@@ -256,7 +274,7 @@ There is no data while there should be the data in the time intervels.
 It says that there are gaps in the time index. This is unsurprising, because of daylight savings. So we use **fill_gaps().**
 
 ```{r}
-?fill_gaps
+#?fill_gaps
 harvest <- tsibble(
   year = c(2010, 2011, 2013, 2011, 2012, 2014),
   fruit = rep(c("kiwi", "cherry"), each = 3),
