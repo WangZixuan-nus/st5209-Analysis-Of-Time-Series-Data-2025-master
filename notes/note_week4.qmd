@@ -1,15 +1,18 @@
 ---
-title: "Week 4 Demonstration"
-format: html
+title: "Week 4 note"
+author: "Wang Zixuan"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
 editor: visual
-  markdown: 
-    wrap: 72
 ---
 
 ## Set up
 
 ```{r}
-#| message: FALSE
+#| message: false
+#| warning: false
 library(fpp3)
 library(tidyverse)
 library(slider)
@@ -320,7 +323,7 @@ diabetes_fc <- diabetes_fit |>
 
 # 
 
-CLASS
+# Lecture 
 
 ## 1. Drift vs linear trend method
 
@@ -332,7 +335,7 @@ global_economy |>
   filter(Country == "Australia") |>
   autoplot(Population)
 
-names(global_economy)
+
 economy_fit <-  global_economy |>
   filter(Country == "Australia") |>
   model(Drift = NAIVE(Population ~ drift()),
@@ -380,12 +383,6 @@ $$
 \hat x_{n+h|n} = x_{n - k} + \frac{(h-k)/p}{n-p}\sum_{t=p+1}^n(x_t - x_{t-p}),
 $$ where $k = -h~\text{mod}~p$. The forecast formula is not particularly important. The method can be fit using the code `SNAIVE(y ~ drift())`.
 
-```{r}
-economy_fit <-  global_economy |>
-  filter(Country == "Australia") |>
-  model(SeasonalNaive=SNAIVE(Population ~ drift()))
-```
-
 ## 3. Forecasting
 
 Which of `NAIVE`, `SNAIVE`, `NAIVE(y ~ drift())` and `SNAIVE(y ~ drift())` are most appropriate for the following datasets?
@@ -395,11 +392,20 @@ Which of `NAIVE`, `SNAIVE`, `NAIVE(y ~ drift())` and `SNAIVE(y ~ drift())` are m
     ```{r}
     aus_production |> 
       autoplot(Bricks)
+    ```
 
+    The time plot shows strong seasonality and a possibly nonlinear trend.
+
+    We hence try out seasonal naive with and without drift.
+
+    ```{r}
     aus_production |> gg_season(Bricks)
+    ```
 
+    ```{r}
     aus_fit <- aus_production |>
-      filter(!is.na(Bricks)) |>
+      filter(# remove missing values
+        !is.na(Bricks)) |>
       model(SNaive = SNAIVE(Bricks),
             SNaiveDrift = SNAIVE(Bricks ~ drift())
         )
@@ -413,13 +419,18 @@ Which of `NAIVE`, `SNAIVE`, `NAIVE(y ~ drift())` and `SNAIVE(y ~ drift())` are m
     ```{r}
     ?hh_budget
     hh_budget |> autoplot(Wealth)
-    hh_budget |>
-      model(
-        Drift = NAIVE(Wealth ~ drift())
-        ) |>
-      forecast(h = 10) |>
-      autoplot(hh_budget)
     ```
+
+There does not seem to be seasonality in any of the four time series, but they seem to exhibit some upward trend. Hence, we will try applying the naive method with drift.
+
+```{r}
+hh_budget |>
+  model(
+    Drift = NAIVE(Wealth ~ drift())
+    ) |>
+  forecast(h = 10) |>
+  autoplot(hh_budget)
+```
 
 ## 4. Prediction intervals
 
@@ -462,6 +473,8 @@ aus_jap_fc |>
 
 Japan economic crisis in 1995 - uncertainty
 
+The "confidence interval: 95%": There is not probability in absolute terms, it's actually a **conditional probability**. conditioning on an assumption that the model is correct. so the logic is that you assume the time series model that you have and that you fit it.And even when the model is correct, there is still some uncertainty in the observation, because there is some randomness or noise. it does not account for the possibility that the mobile can be wrong. In the real world, most of the time your time series model is going to be wrong. OK, unless you have some very well behaved physical phenomena, for instance, and perhaps the time series model is wrong.
+
 The moral of the story is that, as mentioned in the video lecture, we should not take prediction intervals at face value, as they depend on the fitted model being "correct". This is rarely the case, especially given the possibility of future unforeseen (and therefore unmodeled) scenarios.
 
 ## 5. Train test split
@@ -477,47 +490,60 @@ a.  Starting with the above snippet, create a training set for Australian takeaw
 
     remove the test set, 4\*12 points
 
+    create the train set
+
     ```{r}
     takeaway_train <- takeaway |> 
       slice_head(n = nrow(takeaway)- 4 * 12)
-
-    takeaway_fc <- takeaway_train |>
-      model(Naive = NAIVE(Turnover),
-            SNaive = SNAIVE(Turnover),
-            Drift = NAIVE(Turnover ~ drift()),
-            SDrift = SNAIVE(Turnover ~ drift())) |>
-      forecast(h = 48)
-
     ```
 
 b.  Fit all the appropriate benchmark methods to the training set and forecast the periods covered by the test set.
 
-    compare the forecast and the test set.
-
     ```{r}
-    takeaway_fc |>
-      accuracy(takeaway) |>
-     # select(.model, RMSSE, MASE, RMSE, MAE) |>
-        arrange(RMSE)
+    fit <- takeaway_train |>
+      model(
+        naive = NAIVE(Turnover),
+        drift = RW(Turnover ~ drift()),
+        mean = MEAN(Turnover),
+        snaive = SNAIVE(Turnover),
+        snaive_drift = SNAIVE(Turnover ~ drift())
+      )
+    fc <- fit |> forecast(h = "4 years")
     ```
 
 c.  Compute the accuracy of your forecasts. Which method does best?
 
+    ```{r}
+    fc |>
+      accuracy(takeaway) |>
+      arrange(MASE)
+    ```
+
 d.  Make a time plot of the forecasts to verify this.
 
     ```{r}
-    takeaway_fc |> autoplot(takeaway, level = NULL)
+    fc |> autoplot(takeaway, level = NULL)
     ```
 
 e.  Which error metrics are preferred and why? How to interpret them?
 
     recall: for regression, R\^2 value, close to1 -\> model is good. close to 0 -\>model is not good.
 
+    We are doing the classification.
+
     for forecasting: MASE and RMSSE, error they get from the naive model.
+
+    RMSSE and MASE are preferred because they are more interpretable. They are MSE and MASE divided by the one-step-ahead training error of the naive method. This is similar logic to $R^2$.
 
 f.  What is a problem with doing a train test split?
 
-    forecast horizon increasing - \> error becomes bigger
+    Cannot focus on a specific forecast horizon.
+
+    forecast horizon increasing - \> error becomes bigger(harder to predict)
+
+    We want to refine the forecast horizon.
+
+    **`(PS: seems a hard question,but I do not understand, can view the video again)`**
 
 ## 6. Cross-validation
 
@@ -543,15 +569,19 @@ a.  Perform cross-validation for Australian takeaway food turnover with $h=4$.
 
 b.  Why is the error smaller compared to a single train-test split?
 
+    Because the CV error is measured with respect to forecasts that are 1 to 4 steps ahead. On the other hand, the train-test split error involved that of forecasts up to 48 steps ahead.
+
 c.  Why might we want to set `.step` to a larger value? What goes wrong if we set it to be too large a value?
 
     if .step = 1, too much dataset, statistically more good, more stable measurements.
 
     but the computer may compute for a long time.
 
+    `.step` controls the number of splits made. If it is too small, we have many splits, which may lead to high computational overhead. On the other hand, if it is too big, we have too few splits, which means that we compute the error over too few data points. a trade-off
+
 d.  If we are mostly interested in forecast accuracy 4 months ahead, how should we change the code to focus on this task? How do these errors compare to before?
 
-    h = 4, we forecast 1\~4 months.
+    when h = 4, we forecast 1\~4 months.
 
     ```{r}
     takeaway_fc <- takeaway_fit |>

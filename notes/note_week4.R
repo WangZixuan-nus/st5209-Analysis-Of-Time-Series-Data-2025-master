@@ -1,0 +1,534 @@
+# ---
+# title: "Week 4 note"
+# author: "Wang Zixuan"
+# output: 
+#   pdf_document:
+#     toc: true
+#     number_sections: true
+# editor: visual
+# ---
+# 
+# ## Set up
+# 
+#| message: false
+#| warning: false
+library(fpp3)
+library(tidyverse)
+library(slider)
+library(gridExtra)
+library(broom)
+# 
+# # pre-reading
+# 
+# # 6 Introduction to Forecasting
+# 
+# ## 1. Simple forecasting strategies and statistical models
+# 
+# For all methods, note that the forecast distribution is the conditional distribution for $x_{n+h}$ given the observed data and the fitted parameter, i.e., it is
+# 
+# $$ p_{\hat \theta}(x_{n+h}|x_1,x_2,\ldots,x_n) $$
+# 
+# ### Mean method
+# 
+# Show that the mean method is derived from the statistical model shown in the video, i.e. $$ x_t = \theta + \epsilon_t $$ with $\epsilon_1,\epsilon_2,\ldots,\epsilon_n \sim_{i.i.d.} \mathcal{N}(0,\sigma^2)$.
+# 
+# ------------------------------------------------------------------------
+# 
+# The mean method gives the forecast
+# 
+# $$ \hat x_{n+h|n} = \frac{1}{n}\sum_{t=1}^n x_t. $$
+# 
+# Given the statistical model above, the forecast distribution has mean equal to $\theta$. Hence, we just need to know what is the estimate of $\hat\theta$ from $x_1,x_2,\ldots,x_n$.
+# 
+# Now observe that $x_1,x_2,\ldots,x_n$ are i.i.d. Gaussians with the same mean.
+# 
+# Hence, the best estimate is the sample mean $\bar x_n$.
+# 
+# More rigorously, we can write the likelihood as
+# 
+# $$ p_\theta(x_{1:n}) \propto \exp\left(- \frac{1}{2\sigma^2}\sum_{t=1}^n (x_t - \theta)^2 \right) $$
+# 
+# Taking a logarithm gives
+# 
+# $$ \log p_\theta(x_{1:n}) = - \frac{1}{2\sigma^2}\sum_{t=1}^n (x_t - \theta)^2 + C. $$
+# 
+# This is maximized by $\bar x_n$.
+# 
+# ------------------------------------------------------------------------
+# 
+# ### Naive method
+# 
+# Show that the naive method is derived from the statistical model shown in the video, i.e. $$ x_t = x_{t-1} + \epsilon_t $$ with $\epsilon_1,\epsilon_2,\ldots,\epsilon_n \sim_{i.i.d.} \mathcal{N}(0,\sigma^2)$.
+# 
+# ------------------------------------------------------------------------
+# 
+# The naive method gives the forecast
+# 
+# $$ \hat x_{n+h|n} = x_n $$
+# 
+# To derive this from the model, recurse @eq-naive-method to get
+# 
+# $$ x_{n+h} = x_n + \epsilon_{n+1} + \epsilon_{n+2} + \cdots + \epsilon_{n+h}. $$
+# 
+# This shows that
+# 
+# $$ x_{n+h}|x_{1:n} \sim \mathcal{N}(x_n,h\sigma^2). $$
+# 
+# The mean of this distribution is $x_n$.
+# 
+# Note that this also gives the distributional forecast.
+# 
+# ------------------------------------------------------------------------
+# 
+# ### Seasonal naive method
+# 
+# What is the statistical model associated with the seasonal naive method?
+# 
+# ------------------------------------------------------------------------
+# 
+# The seasonal naive method gives the forecast
+# 
+# $$ \hat x_{n+h|n} = x_{n - p + (h~\text{mod}~p)}. $$
+# 
+# In analogy with the naive method, we have
+# 
+# $$ x_t = x_{t-p} + \epsilon_t $$
+# 
+# ------------------------------------------------------------------------
+# 
+# ### Linear trend method
+# 
+# What is the statistical model for the linear trend method?
+# 
+# ------------------------------------------------------------------------
+# 
+# We have already seen this model in the notes. It is
+# 
+# $$ x_t = \beta_0 + \beta_1 t + \epsilon_t $$
+# 
+# ------------------------------------------------------------------------
+# 
+# ### Drift method
+# 
+# Consider the statistical model $$ x_t = \theta + x_{t-1} + \epsilon_t. $$ This is a random walk with drift $\theta$. What is the conditional distribution $p_\theta(x_t|x_{t-1})$? What is maximum likelihood estimate for $\theta$? If we use this for forecasting, what is the formula for the $h$-step ahead forecast?
+# 
+# ------------------------------------------------------------------------
+# 
+# Similar to the naive method, we have
+# 
+# $$ x_{n+h} = x_n + h\theta + \sum_{t=n+1}^{n+h} \epsilon_t $$
+# 
+# so that the mean of the forecast distribution is
+# 
+# $$ \hat x_{n+h|n} = x_n + h\theta. $$
+# 
+# Similar to the mean method, we just have to estimate $\theta$.
+# 
+# We have
+# 
+# $$ p_\theta(x_t|x_{t-1}) \propto \exp\left(-\frac{1}{2\sigma^2}(x_t - \theta - x_{t-1})^2\right) $$
+# 
+# Multiplying these together for $t=2,3,\ldots,n)$, we get
+# 
+# $$ p(x_2\ldots,x_n|x_1) \propto \exp\left(-\frac{1}{2\sigma^2}\sum_{t=2}^n (x_t - x_{t-1} - \theta)^2\right) $$
+# 
+# The maximizer is hence $\hat\theta = \frac{1}{n-1}\sum_{t=2}^n (x_t - x_{t-1}) = \frac{x_n - x_1}{n-1}$.
+# 
+# The forecast is thus
+# 
+# $$
+# \hat x_{n+h|n} = x_n + h \cdot \frac{x_n-x_1}{n-1}.
+# $$
+# 
+# ## **6.3 Forecasting using `fable`**
+# 
+arrivals_fit <- aus_arrivals |> 
+    model(
+        Mean = MEAN(Arrivals),
+        Naive = NAIVE(Arrivals),
+        SeasonalNaive = SNAIVE(Arrivals),
+        LinearTrend = TSLM(Arrivals ~ trend()),
+        Drift = NAIVE(Arrivals ~ drift())
+        )
+arrivals_fit
+# 
+# Note that the object returned by `model()` is a *mable* (model table). It contains a column for every method specified and a row for every time series in the tsibble supplied to `model()`. 
+# 
+# forecasts：
+# 
+arrivals_fc <- arrivals_fit |> forecast(h = 8)
+arrivals_fc
+# 
+# argument h=8 specifies the forecast horizon to be 8 time units.
+# 
+# The code returns a *fable* (forecast table), in which each row is a forecast by a given model
+# 
+arrivals_fc |>
+  filter(Origin == "Japan") |>
+  autoplot() + 
+  theme_minimal()
+# 
+arrivals_fc |>
+    filter(Origin == "Japan") |>
+    autoplot(aus_arrivals,
+             level = NULL)
+
+arrivals_fc |>
+    filter(Origin == "Japan") |>
+    autoplot(aus_arrivals)
+# 
+# ## **6.4 Forecasting with decomposition**
+# 
+diabetes <- read_rds("D:/AAnus/semester2/ST5209X Analysis Of Time Series Data/st5209-2025-master/_data/cleaned/diabetes.rds")
+fit1 <- diabetes |> 
+    model(StlModel = decomposition_model(
+        STL(TotalC), #method for decomposition
+        TSLM(season_adjust ~ trend()), #using the linear trend method to model the seasonally adjusted component
+        SNAIVE(season_year)) #model the seasonal component
+     )
+fit1|>
+    forecast(h = 24) |>
+    autoplot(diabetes, level = NULL)
+fc1 <- fit1|>
+    forecast(h = 24)
+# 
+# ## **6.5 Transformations**
+# 
+fit2 <- diabetes |> 
+    model(StlModel = decomposition_model(
+        STL(log(TotalC)),
+        TSLM(season_adjust ~ trend()),
+        SNAIVE(season_year))
+     )
+fit2|>
+    forecast(h = 24) |>
+    autoplot(diabetes, level = NULL)
+fc2 <- fit2|>
+    forecast(h = 24)
+# 
+autoplot(diabetes, TotalC) + 
+    autolayer(fc1, series = "No Log Transform", color = "blue", level = NULL) + 
+    autolayer(fc2, series = "Log Transform", color = "red", level = NULL) +
+    labs(title = "Diabetes Forecast: Log vs No Log Transform",
+         y = "Total Cases",
+         x = "Time") +
+    theme_minimal()
+# 
+# ### **6.9.2 Prediction intervals from statistical models**
+# 
+diabetes |> 
+    model(StlModel = decomposition_model(
+        STL(log(TotalC)),
+        TSLM(season_adjust ~ trend()),
+        SNAIVE(season_year))
+     ) |>
+    forecast(h = 24) |>
+    autoplot(diabetes)
+
+# 
+# ### **6.10.2 Train-test split for time series**
+# 
+#create a training set comprising the first 80% time points
+diabetes_train <- diabetes |> 
+    slice_head(n = round(nrow(diabetes) * 0.8))
+
+#fit the methods to the training set
+diabetes_fit <- diabetes_train |>
+    model(
+        Mean = MEAN(TotalC),
+        Naive = NAIVE(TotalC),
+        SeasonalNaive = SNAIVE(TotalC),
+        LinearTrend = TSLM(TotalC ~ trend()),
+        StlModel = decomposition_model(
+            STL(log(TotalC)),
+            TSLM(season_adjust ~ trend()))
+    )
+
+#forcast method to create a fabble 
+diabetes_fc <- diabetes_fit |> 
+    forecast(h = 41)
+
+diabetes_fc |> autoplot(diabetes, level = NULL)
+# 
+# #accuracy(forecast, actual = NULL, measures = NULL)
+# 
+# accuracy(diabetes_fc, diabetes)
+# 
+#verify the accuracy 
+diabetes_fc |>
+    accuracy(diabetes) |>
+    select(.model, RMSSE, MASE, RMSE, MAE) |>
+    arrange(MASE)
+# 
+# ### **6.10.3 Time series cross-validation**
+# 
+diabetes_cv <- diabetes |> stretch_tsibble(.init = 120, .step = 1)
+diabetes_cv
+# 
+diabetes_fit <- diabetes_cv |>
+    model(
+        Mean = MEAN(TotalC),
+        Naive = NAIVE(TotalC),
+        SeasonalNaive = SNAIVE(TotalC),
+        LinearTrend = TSLM(TotalC ~ trend()),
+        StlModel = decomposition_model(
+            STL(log(TotalC)),
+            TSLM(season_adjust ~ trend()))
+    )
+
+diabetes_fc <- diabetes_fit |>
+    forecast(h = 6)
+# 
+diabetes_fit <- diabetes_cv |>
+    model(
+        Mean = MEAN(TotalC),
+        Naive = NAIVE(TotalC),
+        SeasonalNaive = SNAIVE(TotalC),
+        LinearTrend = TSLM(TotalC ~ trend()),
+        StlModel = decomposition_model(
+            STL(log(TotalC)),
+            TSLM(season_adjust ~ trend()))
+    )
+
+diabetes_fc <- diabetes_fit |>
+    forecast(h = 6)
+# 
+# # 
+# 
+# # Lecture 
+# 
+# ## 1. Drift vs linear trend method
+# 
+# Starting with the following code snippet, compute forecasts using the drift method and the linear trend method for the population of Australia for the next 50 years .
+# 
+?global_economy
+global_economy |>
+  filter(Country == "Australia") |>
+  autoplot(Population)
+
+
+economy_fit <-  global_economy |>
+  filter(Country == "Australia") |>
+  model(Drift = NAIVE(Population ~ drift()),
+                LinearTrend = TSLM(Population ~ trend()))
+
+economy_fit 
+# 
+economy_fc <- economy_fit |> 
+    forecast(h = 50)
+economy_fc # a fable 
+# 
+economy_fc |> 
+         autoplot()
+economy_fc |> 
+         autoplot(global_economy)
+# 
+# Which forecast looks better? Which prediction intervals are more realistic?
+# 
+# -startpoint
+# 
+# -confidence intervel for linear trend stays constant, while for drift method becomes bigger
+# 
+# with time going by, the forecast maybe more uncertain.
+# 
+# The drift method forecast looks better as it starts closer to the last value of the time series.
+# 
+# The drift method's prediction intervals become wider over time, while the linear trend method prediction intervals do not. The former is thus more realistic.
+# 
+# The assumption for the linear trend method is that there is a deterministic trend and the noise is purely observational.
+# 
+# The assumption for the drift method is that there is an inherent state that is changing stochastically over time.
+# 
+# The latter more accurately describes population growth, while the former more accurately describes something like the position of a particle moving in a vacuum, where the position is measured by a noisy instrument.
+# 
+# ## 2. Seasonal naive method with drift
+# 
+# The seasonal naive method with drift combines the seasonal naive and drift methods. It gives the forecast:
+# 
+# $$
+# \hat x_{n+h|n} = x_{n - k} + \frac{(h-k)/p}{n-p}\sum_{t=p+1}^n(x_t - x_{t-p}),
+# $$ where $k = -h~\text{mod}~p$. The forecast formula is not particularly important. The method can be fit using the code `SNAIVE(y ~ drift())`.
+# 
+# ## 3. Forecasting
+# 
+# Which of `NAIVE`, `SNAIVE`, `NAIVE(y ~ drift())` and `SNAIVE(y ~ drift())` are most appropriate for the following datasets?
+# 
+# -   Bricks (`aus_production`)
+# 
+    aus_production |> 
+      autoplot(Bricks)
+# 
+#     The time plot shows strong seasonality and a possibly nonlinear trend.
+# 
+#     We hence try out seasonal naive with and without drift.
+# 
+    aus_production |> gg_season(Bricks)
+# 
+    aus_fit <- aus_production |>
+      filter(# remove missing values
+        !is.na(Bricks)) |>
+      model(SNaive = SNAIVE(Bricks),
+            SNaiveDrift = SNAIVE(Bricks ~ drift())
+        )
+    aus_fit |>
+      forecast(h = 16)|>
+      autoplot(aus_production, level = NULL)
+# 
+# -   Household wealth (`hh_budget`)
+# 
+    ?hh_budget
+    hh_budget |> autoplot(Wealth)
+# 
+# There does not seem to be seasonality in any of the four time series, but they seem to exhibit some upward trend. Hence, we will try applying the naive method with drift.
+# 
+hh_budget |>
+  model(
+    Drift = NAIVE(Wealth ~ drift())
+    ) |>
+  forecast(h = 10) |>
+  autoplot(hh_budget)
+# 
+# ## 4. Prediction intervals
+# 
+# Consider the `aus_arrivals` dataset. Filter the time series of arrivals from Japan to before 1995, and fit `NAIVE`, `SNAIVE`, `NAIVE(y ~ drift())` and `SNAIVE(y ~ drift())` . Use the fitted models to forecast the rest of the time series. Do their prediction intervals contain the truth?\
+# 
+names(aus_arrivals)
+aus_arrivals |>
+  filter(Origin == "Japan") |>
+  filter_index(~ "Q4 1994") |>
+  autoplot()
+
+aus_jap_before95 <- aus_arrivals |>
+  filter(Origin == "Japan") |>
+  filter_index(~ "Q4 1994")
+
+aus_jap_fc <- aus_jap_before95 |>
+  model(Naive = NAIVE(Arrivals),
+        SNaive = SNAIVE(Arrivals),
+        Drift = NAIVE(Arrivals ~ drift()),
+        SDrift = SNAIVE(Arrivals ~ drift())) |>
+  forecast(h = 71)
+
+aus_jap_fc|> autoplot(aus_jap_before95, level = NULL)
+# 
+aus_jap_fc |>
+  filter(.model == "SDrift") |>
+  autoplot(aus_jap_before95)
+# 
+# The seasonal naive method with drift seems like the best method, looking at the historical data from before 1995, but its prediction intervals do not contain the future values of the time series.
+# 
+aus_jap_fc |>
+  filter(.model == "SDrift") |>
+  autoplot(aus_arrivals)
+# 
+# Japan economic crisis in 1995 - uncertainty
+# 
+# The "confidence interval: 95%": There is not probability in absolute terms, it's actually a **conditional probability**. conditioning on an assumption that the model is correct. so the logic is that you assume the time series model that you have and that you fit it.And even when the model is correct, there is still some uncertainty in the observation, because there is some randomness or noise. it does not account for the possibility that the mobile can be wrong. In the real world, most of the time your time series model is going to be wrong. OK, unless you have some very well behaved physical phenomena, for instance, and perhaps the time series model is wrong.
+# 
+# The moral of the story is that, as mentioned in the video lecture, we should not take prediction intervals at face value, as they depend on the fitted model being "correct". This is rarely the case, especially given the possibility of future unforeseen (and therefore unmodeled) scenarios.
+# 
+# ## 5. Train test split
+# 
+takeaway <- aus_retail |>
+  filter(Industry == "Takeaway food services") |>
+  summarise(Turnover = sum(Turnover))
+takeaway |> autoplot()
+# 
+# a.  Starting with the above snippet, create a training set for Australian takeaway food turnover (`aus_retail`) by withholding the last four years as a test set.
+# 
+#     remove the test set, 4\*12 points
+# 
+#     create the train set
+# 
+    takeaway_train <- takeaway |> 
+      slice_head(n = nrow(takeaway)- 4 * 12)
+# 
+# b.  Fit all the appropriate benchmark methods to the training set and forecast the periods covered by the test set.
+# 
+    fit <- takeaway_train |>
+      model(
+        naive = NAIVE(Turnover),
+        drift = RW(Turnover ~ drift()),
+        mean = MEAN(Turnover),
+        snaive = SNAIVE(Turnover),
+        snaive_drift = SNAIVE(Turnover ~ drift())
+      )
+    fc <- fit |> forecast(h = "4 years")
+# 
+# c.  Compute the accuracy of your forecasts. Which method does best?
+# 
+    fc |>
+      accuracy(takeaway) |>
+      arrange(MASE)
+# 
+# d.  Make a time plot of the forecasts to verify this.
+# 
+    fc |> autoplot(takeaway, level = NULL)
+# 
+# e.  Which error metrics are preferred and why? How to interpret them?
+# 
+#     recall: for regression, R\^2 value, close to1 -\> model is good. close to 0 -\>model is not good.
+# 
+#     We are doing the classification.
+# 
+#     for forecasting: MASE and RMSSE, error they get from the naive model.
+# 
+#     RMSSE and MASE are preferred because they are more interpretable. They are MSE and MASE divided by the one-step-ahead training error of the naive method. This is similar logic to $R^2$.
+# 
+# f.  What is a problem with doing a train test split?
+# 
+#     Cannot focus on a specific forecast horizon.
+# 
+#     forecast horizon increasing - \> error becomes bigger(harder to predict)
+# 
+#     We want to refine the forecast horizon.
+# 
+#     **`(PS: seems a hard question,but I do not understand, can view the video again)`**
+# 
+# ## 6. Cross-validation
+# 
+# a.  Perform cross-validation for Australian takeaway food turnover with $h=4$.
+# 
+    takeaway_fit <- takeaway |>
+      stretch_tsibble(.step = 5, .init = 50) |>
+      model(
+        Naive = NAIVE(Turnover),
+            SNaive = SNAIVE(Turnover),
+            Drift = NAIVE(Turnover ~ drift()),
+            SDrift = SNAIVE(Turnover ~ drift()))
+
+    takeaway_fc <- takeaway_fit |>
+      forecast(h = 4)
+
+    takeaway_fc |>
+      accuracy(takeaway)
+# 
+#     MASE and RMSSE of SNaiveDrift = 0.75,0.78, STILL the least one. Also, the error becomes smaller than before.
+# 
+# b.  Why is the error smaller compared to a single train-test split?
+# 
+#     Because the CV error is measured with respect to forecasts that are 1 to 4 steps ahead. On the other hand, the train-test split error involved that of forecasts up to 48 steps ahead.
+# 
+# c.  Why might we want to set `.step` to a larger value? What goes wrong if we set it to be too large a value?
+# 
+#     if .step = 1, too much dataset, statistically more good, more stable measurements.
+# 
+#     but the computer may compute for a long time.
+# 
+#     `.step` controls the number of splits made. If it is too small, we have many splits, which may lead to high computational overhead. On the other hand, if it is too big, we have too few splits, which means that we compute the error over too few data points. a trade-off
+# 
+# d.  If we are mostly interested in forecast accuracy 4 months ahead, how should we change the code to focus on this task? How do these errors compare to before?
+# 
+#     when h = 4, we forecast 1\~4 months.
+# 
+    takeaway_fc <- takeaway_fit |>
+      forecast(h = 4)
+
+
+    takeaway_fc |>
+      group_by(.id, .model) |>
+      mutate(h=row_number()) |>
+      ungroup() |>
+      filter(h == 4) |>
+      as_fable(response ="Turnover",distribution =Turnover)|>
+      accuracy(takeaway)
