@@ -1,16 +1,23 @@
 ---
-title: "Week 5 Demonstration"
-format: html
+title: "Week 5 note"
+author: "Wang Zixuan"
+format:
+  pdf:
+    toc: true
+    toc-depth: 3 
+    number-sections: true 
 editor: visual
 ---
 
 ## Set up
 
 ```{r}
-#| message: FALSE
+#| message: false
+#| warning: false
 library(fpp3)
 library(tidyverse)
 library(slider)
+library(TSA)  
 ```
 
 # pre-reading
@@ -96,6 +103,17 @@ pelt |>
 Seasonal plot
 
 ```{r}
+gg_custom_season <- function(data, y, period, start = 1) {
+  # Make a seasonal plot with period specified in integer
+  # start argument specifies the row number that will be the first season
+  # in the period
+  y <- enquo(y)
+  data |>
+    mutate(Season = (row_number() - start) %% period + start,
+           Iteration = as.factor((row_number() - start) %/% period + 1)) |>
+    ggplot(aes(x = Season, y = !!y, color = Iteration)) +
+    geom_line()
+} 
 pelt |> 
   as_tsibble()|>
   gg_custom_season(Lynx, period = 10)
@@ -158,8 +176,8 @@ star |>
 periodogram
 
 ```{r}
-star |>
-    periodogram(max_freq = 0.08)
+#star |>
+   # periodogram(max_freq = 0.08)
 ```
 
 example: **Lynx furs**
@@ -174,6 +192,7 @@ pelt |>
 periodogram
 
 ```{r}
+library(TSA)  
 pelt$Lynx |>
     periodogram(max_freq = 0.5)
 ```
@@ -260,7 +279,6 @@ When would they be useful?
 The follow code snippet generates summary statistics for the various time series in the `tourism` dataset.
 
 ```{r}
-#| eval: FALSE
 #compute features 
 tourism_features <- tourism |>
   features(Trips, feature_set(pkgs = "feasts"))
@@ -273,7 +291,9 @@ Make a scatter plot of seasonal strength against trend strength and color the po
 ```{r}
 tourism_features|>
   ggplot()+
-  geom_point(aes(x = trend_strength, y = seasonal_strength_year, color = Purpose))+
+  geom_point(aes(x = trend_strength, 
+                 y = seasonal_strength_year, 
+                 color = Purpose))+
   labs(title = "Seasonal Strength vs. Trend Strength",
        x = "Trend Strength",
        y = "Seasonal Strength",
@@ -286,27 +306,38 @@ Travel for holiday is more seasonal.
 ```{r}
 library(broom)
 pcs <- tourism_features |>
-  select(-State,-Region,-Purpose) |>
+  select(-State, -Region, -Purpose) |>
   prcomp(scale = TRUE) |>
-  augment(tourism_features) 
-
+  augment(tourism_features)
 pcs |>
-  ggplot(aes(x = .fittedPC1, y = .fittedPC2, col = Purpose))+
-           geom_point() +
-           theme(aspect.ratio=1)
+  ggplot(aes(x = .fittedPC1, y = .fittedPC2, col = Purpose)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
 ```
+
+Here, we also see a separation between the time series for holiday travel and other time series. We now inspect some of the outlier time series, i.e. those that have especially large values for the first PC
 
 Perform PCA on the `tourism_features` dataframe and make a scatter plot of the first two PCs. What do you observe?
 
 ```{r}
-pcs|>
+pcs |> 
   filter(.fittedPC1 > 10) |>
   left_join(tourism) |>
-  as_tsibble(index = Quarter, key = c(Region, State, Purpose)|>
-               ggplot() +
-               geom_line(aes(x = Quarter,y = Trips))+
-               facet_wrap(~ Region)
+  as_tsibble(index = Quarter, key = c(Region, State, Purpose)) |>
+  ggplot(aes(x = Quarter, y = Trips)) + 
+  geom_line() + 
+  facet_wrap(~ Region)
 ```
+
+Potential reasons why these are outliers:
+
+-   Holiday visits to the south coast of NSW is highly seasonal but has almost no trend, whereas most holiday destinations in Australia show some trend over time.
+
+-   Melbourne is an unusual holiday destination because it has almost no seasonality, whereas most holiday destinations in Australia have highly seasonal tourism.
+
+-   The north western corner of Western Australia is unusual because it shows an increase in business tourism in the last few years of data, but little or no seasonality.
+
+-   The south western corner of Western Australia is unusual because it shows both an increase in holiday tourism in the last few years of data and a high level of seasonality.
 
 ## 4. Seasonal periods and frequencies
 
@@ -335,14 +366,41 @@ gg_custom_season <- function(data, y, period, start = 1) {
     ggplot(aes(x = Season, y = !!y, color = Iteration)) +
     geom_line()
 }
-```
 
-```{r}
-periodogram <- function(x, max_freq = 0.5)
-periodogram(y_dat$y)
+periodogram <- function(x, max_freq = 0.5) {
+  #' Plot a Periodogram for a Time Series
+  #'
+  #' This function takes a vector representing a time series,
+  #' and plots the periodogram of the time series.
+  #'
+  #' @param x A numeric vector representing the time series.
+  #' @param max_freq The max frequency to be plotted
+  #'
+  #' @return A ggplot object representing the periodogram of the time series.
+  #'
+  
+  # old_warn <- options(warn = -1)  # Disable warnings
+  n <- length(x)
+  freq <- 0 : (n - 1) / n
+  per <- Mod(fft(x - mean(x, na.rm = TRUE))) ^ 2
+  tibble(freq = freq, per = per) |>
+    ggplot(aes(x = freq, y = per)) +
+    geom_segment(aes(xend = freq, yend = 0)) +
+    labs(x = "Frequency", y = "Periodogram") +
+    theme_minimal() + xlim(0, max_freq)
+  # on.exit(options(old_warn))      # Restore warning setting on exit
+}
 ```
 
 Plot a periodogram for $(y_t)$. What periods do the peaks correspond to? Why are there multiple peaks when $(y_t)$ was defined using a seasonal period of 10?
+
+```{r}
+periodogram(y_dat$y)
+```
+
+The frequencies are 0.1, 0.2, 0.3, 0.4, and 0.5. The periods are 10, 5, 3.3, 2.5, 2.
+
+The periodogram values measure the correlation of the time series with *sinusoidal* functions. Since $(y_t)$ is not sinusoidal, it requires sinusoidal functions of multiple frequencies to build up its waveform. However, the frequencies required are all multiples of the overall waveform frequencies (0.1). Put another way, their periods are all divisors of the period of $(y_t)$.
 
 ```{r}
 us_retail_employment <- us_employment |>
@@ -352,19 +410,20 @@ us_retail_employment <- us_employment |>
 us_retail_employment|>
   autoplot(Employed)
 
+# Decomposition
 us_retail_employment |>
   model(STL(Employed)) |>
-  components|>
+  components()|>
   mutate(detrend = Employed - trend) |>
   pull(detrend)|>
   periodogram()
 ```
 
+Peak = 0.08(dominate frequency) , 1/0.08 = 12, yearly seasonality , 0.16, 0.24...
+
 ## 5. Periodogram and filters
 
 Consider tourist arrivals to Australia from the UK, contained in the `aus_arrivals` dataset.
-
-A yearly seasonality -\> period = 4
 
 ```{r}
 aus_arrivals |>
@@ -376,10 +435,53 @@ we did not remove the trend, so the periodogram represent a trend.
 
 a.  Plot a periodogram for the time series of arrivals from UK. Where are the peaks?
 
-    Do a low- ???? to a time series before moving windows. The overall trend stays the same, but the frequency is
+    ```{r}
+    aus_arrivals |>
+      filter(Origin == "UK") |>
+      pull(Arrivals) |>
+      periodogram(max_freq = 0.5)
+    ```
 
-    low-ordered seasonality disappears, high frequency stay.
+    Peaks are around 0.008 and around 0.25.
+
+    peak = 0.25, period = 4, A yearly seasonality
 
 b.  a moving average of window size 4 to the time series. What happens to the periodogram?
 
+    Still a upward trend. So period canot simply represent the time seires.
+
+    How do I represent the trends?
+
+    do some transformations on this time series and observe how these transformations affect the shape of the periodic gram
+
+    ```{r}
+    # Moving average 
+    aus_arrivals |>
+      filter(Origin == "UK") |>
+      mutate(ArrivalsMA4 = slide_dbl(Arrivals, mean, .before = 2, .after = 1)) |>
+      pull(ArrivalsMA4) |>
+      periodogram()
+    ```
+
+    The peak at 0.25 gets removed. ( Moving average of a window of size 4-\>remove yearly seasonality)
+
+    If you perform moving average with the window size, then as a multiple of the seasonal periods you remove that seasonality.
+
+    performing a moving average is applying a low pass philtre to the time series.
+
+    Low pass philtre means that it preserves the low frequencies and removes the higher frequencies.
+
 c.  Apply a difference transformation to the time series. What happens to the periodogram?
+
+    ```{r}
+    aus_arrivals |>
+      filter(Origin == "UK") |>
+      mutate(ArrivalsDiff = difference(Arrivals, 1)) |>
+      filter(!is.na(ArrivalsDiff)) |>
+      pull(ArrivalsDiff) |>
+      periodogram()
+    ```
+
+    a difference is just one, right? So it doesn't change the seasonality because so we still have this seasonality of period 4, but it suddenly removes the trend in the time series.
+
+    The peaks for low frequencies get removed.
