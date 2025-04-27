@@ -1,10 +1,11 @@
 ---
 title: "Week 2 note"
 author: "Wang Zixuan"
-output: 
-  pdf_document:
+format:
+  pdf:
     toc: true
-    number_sections: true
+    toc-depth: 3 
+    number-sections: true 
 editor: visual
 ---
 
